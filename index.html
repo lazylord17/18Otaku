@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18Otaku | Home</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            dark: '#222',
+            primary: '#ff4444',
+          }
+        },
+      },
+    };
+  </script>
+  <style>
+    .slider-container {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .slider-container::-webkit-scrollbar {
+      display: none;
+    }
+    .anime-card {
+      transition: all 0.3s ease;
+    }
+    .anime-card:hover {
+      transform: scale(1.05);
+      z-index: 20;
+    }
+  </style>
+</head>
+<body class="bg-dark text-white">
+
+  <!-- Header -->
+  <div id="header"></div>
+
+  <!-- Content -->
+  <main class="container mx-auto px-4 py-8 space-y-12">
+
+    <!-- Top Airing -->
+    <section>
+      <h2 class="text-2xl font-bold mb-4">
+        <i class="fas fa-broadcast-tower text-primary mr-2"></i> Top Airing
+      </h2>
+      <div id="top-airing" class="flex gap-4 overflow-x-auto slider-container pb-4"></div>
+    </section>
+
+    <!-- Popular -->
+    <section>
+      <h2 class="text-2xl font-bold mb-4">
+        <i class="fas fa-fire text-primary mr-2"></i> Popular
+      </h2>
+      <div id="popular-anime" class="flex gap-4 overflow-x-auto slider-container pb-4"></div>
+    </section>
+
+    <!-- Upcoming -->
+    <section>
+      <h2 class="text-2xl font-bold mb-4">
+        <i class="fas fa-calendar-alt text-primary mr-2"></i> Upcoming
+      </h2>
+      <div id="upcoming-anime" class="flex gap-4 overflow-x-auto slider-container pb-4"></div>
+    </section>
+  </main>
+
+  <!-- Jikan Fetching Script -->
+  <script>
+    async function fetchJikan(endpoint) {
+      try {
+        const res = await fetch(`https://api.jikan.moe/v4/${endpoint}`);
+        const data = await res.json();
+        return data.data || [];
+      } catch (err) {
+        console.error(`Error fetching ${endpoint}:`, err);
+        return [];
+      }
+    }
+
+    function createAnimeCard(anime) {
+      return `
+        <div class="anime-card w-40 sm:w-48 md:w-56">
+          <a href="info.html?id=${anime.mal_id}" class="block">
+            <div class="aspect-[2/3] bg-black rounded-lg overflow-hidden mb-2">
+              <img src="${anime.images.jpg.image_url}" alt="${anime.title}" class="w-full h-full object-cover">
+            </div>
+            <h3 class="font-medium truncate">${anime.title}</h3>
+            <p class="text-xs text-gray-400">${anime.year || 'Unknown'}</p>
+          </a>
+        </div>
+      `;
+    }
+
+    async function loadSections() {
+      const topAiring = await fetchJikan('top/anime?filter=airing');
+      const popular = await fetchJikan('top/anime?filter=bypopularity');
+      const upcoming = await fetchJikan('seasons/upcoming');
+
+      document.getElementById('top-airing').innerHTML = topAiring.slice(0, 10).map(createAnimeCard).join('');
+      document.getElementById('popular-anime').innerHTML = popular.slice(0, 10).map(createAnimeCard).join('');
+      document.getElementById('upcoming-anime').innerHTML = upcoming.slice(0, 10).map(createAnimeCard).join('');
+    }
+
+    loadSections();
+
+    // Load header.html from file
+    fetch('header.html')
+      .then(response => response.text())
+      .then(data => {
+        document.getElementById('header').innerHTML = data;
+      });
+  </script>
+
+</body>
+</html>
