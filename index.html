@@ -32,8 +32,8 @@
       cursor: grabbing;
     }
     .poster-box {
-      width: 224px; /* w-56 */
-      height: 336px; /* aspect-[2/3] */
+      width: 224px;
+      height: 336px;
     }
   </style>
 </head>
@@ -80,11 +80,18 @@
   </main>
 
   <script>
-    async function fetchAnime(endpoint) {
+    async function fetchAnime(endpoint, uniqueKeysSet) {
       try {
         const res = await fetch(`https://api.jikan.moe/v4/${endpoint}`);
         const data = await res.json();
-        return data.data;
+        const seen = new Set();
+        return data.data.filter(anime => {
+          const key = anime.title + anime.year;
+          if (seen.has(key) || uniqueKeysSet.has(key)) return false;
+          seen.add(key);
+          uniqueKeysSet.add(key);
+          return true;
+        });
       } catch (err) {
         console.error(`Failed to fetch ${endpoint}:`, err);
         return [];
@@ -106,21 +113,26 @@
     }
 
     async function initAnimeSections() {
-      const topAiring = await fetchAnime('top/anime?filter=airing');
-      const popular = await fetchAnime('top/anime');
-      const upcoming = await fetchAnime('seasons/upcoming');
+      const globalSeen = new Set();
 
+      const topAiring = await fetchAnime('top/anime?filter=airing', globalSeen);
       document.getElementById('top-airing').innerHTML = topAiring.slice(0, 10).map(createCard).join('');
+
+      const popular = await fetchAnime('top/anime', globalSeen);
       document.getElementById('popular-anime').innerHTML = popular.slice(0, 10).map(createCard).join('');
+
+      const upcoming = await fetchAnime('seasons/upcoming', globalSeen);
       document.getElementById('upcoming-anime').innerHTML = upcoming.slice(0, 10).map(createCard).join('');
     }
 
     async function initHeroSlider() {
-      const topAiring = await fetchAnime('top/anime?filter=airing');
+      const res = await fetch('https://api.jikan.moe/v4/top/anime?filter=airing');
+      const data = await res.json();
+      const animeList = data.data;
       const slider = document.getElementById('hero-slider');
       const dots = document.getElementById('hero-dots');
 
-      slider.innerHTML = topAiring.slice(0, 5).map((anime, i) => `
+      slider.innerHTML = animeList.slice(0, 5).map((anime, i) => `
         <div class="hero-slide absolute inset-0 w-full h-full ${i === 0 ? 'opacity-100' : 'opacity-0'} transition-opacity duration-1000" style="background-image: url(${anime.images.jpg.large_image_url}); background-size: cover; background-position: center;">
           <div class="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
           <div class="absolute bottom-0 left-0 right-0 p-8 md:p-12 lg:p-16 max-w-4xl">
@@ -133,7 +145,7 @@
         </div>
       `).join('');
 
-      dots.innerHTML = topAiring.slice(0, 5).map((_, i) => `
+      dots.innerHTML = animeList.slice(0, 5).map((_, i) => `
         <button class="w-3 h-3 rounded-full ${i === 0 ? 'bg-primary' : 'bg-white/30'}" onclick="showHeroSlide(${i})"></button>
       `).join('');
 
