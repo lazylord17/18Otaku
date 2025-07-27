@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>18Otaku | Home</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
   <script>
     tailwind.config = {
       theme: {
@@ -14,20 +14,33 @@
             dark: '#222',
             primary: '#ff4444',
           }
-        },
-      },
+        }
+      }
     };
   </script>
   <style>
+    .hero-slide {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      transition: opacity 1s ease;
+      background-size: cover;
+      background-position: center;
+    }
+    .hero-slide.active {
+      opacity: 1;
+    }
     .slider-container {
       scrollbar-width: none;
       -ms-overflow-style: none;
+      cursor: grab;
     }
     .slider-container::-webkit-scrollbar {
       display: none;
     }
-    .anime-card {
-      transition: all 0.3s ease;
+    .slider-container:active {
+      cursor: grabbing;
     }
     .anime-card:hover {
       transform: scale(1.05);
@@ -35,58 +48,130 @@
     }
   </style>
 </head>
-<body class="bg-dark text-white">
+<body class="bg-black text-white">
 
   <!-- Header -->
   <div id="header"></div>
 
-  <!-- Content -->
+  <!-- Hero Slider -->
+  <section class="relative h-[70vh] min-h-[500px] overflow-hidden" id="hero-slider-container">
+    <div id="hero-slider" class="h-full w-full relative"></div>
+    <div id="hero-dots" class="absolute bottom-8 left-0 right-0 flex justify-center gap-2"></div>
+  </section>
+
+  <!-- Main Content -->
   <main class="container mx-auto px-4 py-8 space-y-12">
 
     <!-- Top Airing -->
     <section>
-      <h2 class="text-2xl font-bold mb-4">
-        <i class="fas fa-broadcast-tower text-primary mr-2"></i> Top Airing
-      </h2>
-      <div id="top-airing" class="flex gap-4 overflow-x-auto slider-container pb-4"></div>
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">
+          <i class="fas fa-bolt text-primary mr-2"></i> Top Airing
+        </h2>
+        <a href="topairing.html" class="text-sm text-gray-400 hover:text-primary flex items-center">
+          View All <i class="fas fa-chevron-right ml-1"></i>
+        </a>
+      </div>
+      <div id="top-airing" class="flex gap-4 overflow-x-auto slider-container pb-4 pt-2 px-1"></div>
     </section>
 
     <!-- Popular -->
     <section>
-      <h2 class="text-2xl font-bold mb-4">
-        <i class="fas fa-fire text-primary mr-2"></i> Popular
-      </h2>
-      <div id="popular-anime" class="flex gap-4 overflow-x-auto slider-container pb-4"></div>
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">
+          <i class="fas fa-fire text-primary mr-2"></i> Popular
+        </h2>
+        <a href="popular.html" class="text-sm text-gray-400 hover:text-primary flex items-center">
+          View All <i class="fas fa-chevron-right ml-1"></i>
+        </a>
+      </div>
+      <div id="popular" class="flex gap-4 overflow-x-auto slider-container pb-4 pt-2 px-1"></div>
     </section>
 
     <!-- Upcoming -->
     <section>
-      <h2 class="text-2xl font-bold mb-4">
-        <i class="fas fa-calendar-alt text-primary mr-2"></i> Upcoming
-      </h2>
-      <div id="upcoming-anime" class="flex gap-4 overflow-x-auto slider-container pb-4"></div>
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">
+          <i class="fas fa-calendar-alt text-primary mr-2"></i> Upcoming
+        </h2>
+        <a href="upcoming.html" class="text-sm text-gray-400 hover:text-primary flex items-center">
+          View All <i class="fas fa-chevron-right ml-1"></i>
+        </a>
+      </div>
+      <div id="upcoming" class="flex gap-4 overflow-x-auto slider-container pb-4 pt-2 px-1"></div>
     </section>
   </main>
 
-  <!-- Jikan Fetching Script -->
+  <!-- Scripts -->
   <script>
-    async function fetchJikan(endpoint) {
-      try {
-        const res = await fetch(`https://api.jikan.moe/v4/${endpoint}`);
-        const data = await res.json();
-        return data.data || [];
-      } catch (err) {
-        console.error(`Error fetching ${endpoint}:`, err);
-        return [];
-      }
+    const API_BASE = "https://api.jikan.moe/v4";
+
+    // Load Header
+    fetch('header.html')
+      .then(res => res.text())
+      .then(data => {
+        document.getElementById('header').innerHTML = data;
+      });
+
+    // Hero Slider
+    async function loadHeroSlider() {
+      const res = await fetch(`${API_BASE}/top/anime`);
+      const data = await res.json();
+      const animeList = data.data.slice(0, 5);
+
+      const slider = document.getElementById('hero-slider');
+      const dots = document.getElementById('hero-dots');
+
+      slider.innerHTML = animeList.map((anime, i) => `
+        <div class="hero-slide ${i === 0 ? 'active' : ''}" style="background-image: url(${anime.images.jpg.large_image_url})">
+          <div class="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
+          <div class="absolute bottom-0 left-0 right-0 p-6 max-w-4xl">
+            <h2 class="text-3xl md:text-5xl font-bold mb-3">${anime.title}</h2>
+            <p class="text-gray-300 mb-5 line-clamp-2">${anime.synopsis || 'No description.'}</p>
+            <a href="info.html?id=${anime.mal_id}" class="bg-white/10 hover:bg-white/20 px-6 py-2 rounded-full font-medium flex items-center w-max">
+              <i class="fas fa-info-circle mr-2"></i> More Info
+            </a>
+          </div>
+        </div>
+      `).join("");
+
+      dots.innerHTML = animeList.map((_, i) => `
+        <button class="w-3 h-3 rounded-full ${i === 0 ? 'bg-primary' : 'bg-white/30'}"
+                onclick="showHeroSlide(${i})"></button>
+      `).join("");
+
+      let currentSlide = 0;
+      setInterval(() => {
+        const slides = document.querySelectorAll('.hero-slide');
+        const dots = document.querySelectorAll('#hero-dots button');
+        slides[currentSlide].classList.remove('active');
+        dots[currentSlide].classList.remove('bg-primary');
+        dots[currentSlide].classList.add('bg-white/30');
+        currentSlide = (currentSlide + 1) % slides.length;
+        slides[currentSlide].classList.add('active');
+        dots[currentSlide].classList.remove('bg-white/30');
+        dots[currentSlide].classList.add('bg-primary');
+      }, 5000);
     }
 
-    function createAnimeCard(anime) {
+    function showHeroSlide(i) {
+      const slides = document.querySelectorAll('.hero-slide');
+      const dots = document.querySelectorAll('#hero-dots button');
+      slides.forEach(s => s.classList.remove('active'));
+      dots.forEach(d => d.classList.remove('bg-primary'));
+      dots.forEach(d => d.classList.add('bg-white/30'));
+      slides[i].classList.add('active');
+      dots[i].classList.remove('bg-white/30');
+      dots[i].classList.add('bg-primary');
+    }
+
+    // Card Generator
+    function createCard(anime) {
       return `
-        <div class="anime-card w-40 sm:w-48 md:w-56">
+        <div class="anime-card w-36 sm:w-44 md:w-52 transform transition duration-300">
           <a href="info.html?id=${anime.mal_id}" class="block">
-            <div class="aspect-[2/3] bg-black rounded-lg overflow-hidden mb-2">
-              <img src="${anime.images.jpg.image_url}" alt="${anime.title}" class="w-full h-full object-cover">
+            <div class="aspect-[2/3] bg-dark rounded-lg overflow-hidden mb-2">
+              <img src="${anime.images.jpg.image_url}" alt="${anime.title}" class="w-full h-full object-cover"/>
             </div>
             <h3 class="font-medium truncate">${anime.title}</h3>
             <p class="text-xs text-gray-400">${anime.year || 'Unknown'}</p>
@@ -95,24 +180,25 @@
       `;
     }
 
-    async function loadSections() {
-      const topAiring = await fetchJikan('top/anime?filter=airing');
-      const popular = await fetchJikan('top/anime?filter=bypopularity');
-      const upcoming = await fetchJikan('seasons/upcoming');
-
-      document.getElementById('top-airing').innerHTML = topAiring.slice(0, 10).map(createAnimeCard).join('');
-      document.getElementById('popular-anime').innerHTML = popular.slice(0, 10).map(createAnimeCard).join('');
-      document.getElementById('upcoming-anime').innerHTML = upcoming.slice(0, 10).map(createAnimeCard).join('');
+    // Load Anime Sections
+    async function loadAnimeSection(endpoint, elementId) {
+      const res = await fetch(`${API_BASE}/${endpoint}`);
+      const data = await res.json();
+      const seen = new Set();
+      const container = document.getElementById(elementId);
+      container.innerHTML = data.data
+        .filter(a => a.images?.jpg?.image_url && !seen.has(a.mal_id) && seen.add(a.mal_id))
+        .slice(0, 12)
+        .map(createCard).join('');
     }
 
-    loadSections();
-
-    // Load header.html from file
-    fetch('header.html')
-      .then(response => response.text())
-      .then(data => {
-        document.getElementById('header').innerHTML = data;
-      });
+    // Init
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadHeroSlider();
+      await loadAnimeSection('top/anime?filter=airing', 'top-airing');
+      await loadAnimeSection('top/anime?filter=bypopularity', 'popular');
+      await loadAnimeSection('seasons/upcoming', 'upcoming');
+    });
   </script>
 
 </body>
