@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Episode List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-900 text-white p-6">
+
+  <h1 class="text-3xl font-bold mb-6">Anime Episodes</h1>
+
+  <div id="videoList" class="grid gap-4"></div>
+
+  <script>
+    // 🔐 Encoded credentials (Base64)
+    const encodedUser = "Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=";
+    const encodedPass = "YnplMDhScExRbGNQdlpS";
+
+    // Decode function
+    function decode(str) {
+      return atob(str);
+    }
+
+    const username = decode(encodedUser);
+    const password = decode(encodedPass);
+
+    const apiUrl = `https://api.streamtape.com/file/list?login=${username}&key=${password}`;
+
+    fetch(apiUrl)
+      .then(res => res.json())
+      .then(data => {
+        const container = document.getElementById("videoList");
+
+        if (!data.result || !data.result.files) {
+          container.innerHTML = "<p>No videos found.</p>";
+          return;
+        }
+
+        data.result.files.forEach(video => {
+          const div = document.createElement("div");
+
+          div.className = "bg-gray-800 p-4 rounded-xl shadow";
+
+          div.innerHTML = `
+            <h2 class="text-lg font-semibold">${video.name}</h2>
+            <p class="text-sm text-gray-400">Size: ${video.size}</p>
+            <a href="https://streamtape.com/v/${video.linkid}" 
+               target="_blank"
+               class="text-blue-400 hover:underline">
+               Watch Episode
+            </a>
+          `;
+
+          container.appendChild(div);
+        });
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById("videoList").innerHTML =
+          "<p class='text-red-400'>Error loading videos.</p>";
+      });
+  </script>
+
+</body>
+</html>
