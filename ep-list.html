@@ -5,6 +5,10 @@
   <title>Anime Episodes</title>
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- Font Awesome -->
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
   <style>
     :root {
       --accent: #ff4444;
@@ -12,46 +16,42 @@
   </style>
 </head>
 
-<body class="bg-[#0b0b0b] text-white min-h-screen p-6">
+<body class="bg-[#0b0b0b] text-white min-h-screen p-4">
 
-  <!-- Title -->
-  <h1 class="text-3xl font-bold text-center mb-6">
+  <h1 class="text-2xl font-semibold text-center mb-6">
     Anime Episodes
   </h1>
 
   <!-- Search -->
-  <div class="max-w-xl mx-auto mb-8">
+  <div class="max-w-md mx-auto mb-6">
     <input id="searchInput"
       type="text"
-      placeholder="Search anime..."
-      class="w-full px-4 py-2 rounded-lg bg-[#1a1a1a] border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[--accent]">
+      placeholder="Search..."
+      class="w-full px-3 py-2 rounded bg-[#1a1a1a] border border-gray-700 focus:outline-none focus:ring-1 focus:ring-[--accent] text-sm">
   </div>
 
   <!-- Grid -->
   <div id="videoList"
-    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
   </div>
 
-  <!-- 🎬 MODAL -->
+  <!-- Modal -->
   <div id="modal"
     class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
 
-    <div class="bg-[#111] rounded-xl w-full max-w-5xl overflow-hidden relative">
+    <div class="bg-[#111] rounded-lg w-full max-w-4xl overflow-hidden relative">
 
-      <!-- Close -->
       <button onclick="closeModal()"
-        class="absolute top-3 right-3 text-white text-xl z-10">
+        class="absolute top-3 right-3 text-white text-lg z-10">
         ✕
       </button>
 
-      <!-- Title -->
       <div id="modalTitle"
-        class="p-4 font-semibold text-lg border-b border-gray-800">
+        class="p-3 text-sm border-b border-gray-800">
       </div>
 
-      <!-- Player -->
       <iframe id="modalPlayer"
-        class="w-full h-[500px]"
+        class="w-full h-[450px]"
         frameborder="0"
         allowfullscreen>
       </iframe>
@@ -71,25 +71,37 @@ const apiUrl = `https://api.streamtape.com/file/listfolder?login=${username}&key
 let allEpisodes = [];
 let filteredEpisodes = [];
 
-/* Parse filename */
+/* SAFE PARSER */
 function parseName(name) {
-  const regex = /\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/;
-  const match = name.match(regex);
+  try {
+    const regex = /\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/;
+    const match = name.match(regex);
 
-  if (!match) return null;
+    if (!match) return null;
 
-  return {
-    malId: match[1],
-    episode: parseInt(match[2]),
-    title: match[3],
-    date: new Date(match[4])
-  };
+    return {
+      malId: match[1],
+      episode: parseInt(match[2]),
+      date: new Date(match[4])
+    };
+  } catch {
+    return null;
+  }
 }
 
-/* Fetch anime (HD image) */
-async function fetchAnime(malId) {
+/* FORMAT DATE */
+function formatDate(date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric"
+  });
+}
+
+/* FETCH ANIME */
+async function fetchAnime(id) {
   try {
-    const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}`);
+    const res = await fetch(`https://api.jikan.moe/v4/anime/${id}`);
     const data = await res.json();
 
     return {
@@ -99,12 +111,12 @@ async function fetchAnime(malId) {
   } catch {
     return {
       title: "Unknown",
-      image: "https://via.placeholder.com/300x450?text=No+Image"
+      image: "https://via.placeholder.com/300x450"
     };
   }
 }
 
-/* Render */
+/* RENDER */
 function render() {
   const container = document.getElementById("videoList");
   container.innerHTML = "";
@@ -112,35 +124,28 @@ function render() {
   filteredEpisodes.forEach(ep => {
     const div = document.createElement("div");
 
-    div.className = "relative rounded-xl overflow-hidden group cursor-pointer";
+    div.className = "relative group cursor-pointer";
 
     div.innerHTML = `
-      <!-- Poster (FIXED RATIO) -->
-      <div class="aspect-[2/3] w-full">
+      <div class="aspect-[2/3] w-full overflow-hidden rounded-md">
         <img src="${ep.image}"
           class="w-full h-full object-cover">
       </div>
 
       <!-- Date -->
-      <div class="absolute top-2 right-2 bg-black/70 text-xs px-2 py-1 rounded">
-        ${ep.date.toLocaleDateString()}
+      <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1.5 py-0.5 rounded">
+        ${formatDate(ep.date)}
       </div>
 
-      <!-- Bottom Overlay -->
-      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-md p-2">
-        <h2 class="text-sm font-semibold truncate">
-          ${ep.animeTitle}
-        </h2>
-        <p class="text-xs text-gray-300">
-          Episode ${ep.episode}
-        </p>
+      <!-- Bottom -->
+      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1">
+        <p class="text-xs truncate">${ep.animeTitle}</p>
+        <p class="text-[10px] text-gray-300">Ep ${ep.episode}</p>
       </div>
 
-      <!-- Hover Play Icon -->
-      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-        <div class="border border-white rounded-full p-4">
-          ▶
-        </div>
+      <!-- Hover -->
+      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition">
+        <i class="fa-solid fa-play text-white text-lg"></i>
       </div>
     `;
 
@@ -150,7 +155,7 @@ function render() {
   });
 }
 
-/* Search */
+/* SEARCH */
 function applySearch() {
   const q = document.getElementById("searchInput").value.toLowerCase();
 
@@ -161,7 +166,7 @@ function applySearch() {
   render();
 }
 
-/* Modal */
+/* MODAL */
 function openModal(ep) {
   document.getElementById("modalTitle").innerText =
     `${ep.animeTitle} Episode ${ep.episode}`;
@@ -179,7 +184,7 @@ function closeModal() {
   document.getElementById("modalPlayer").src = "";
 }
 
-/* Init */
+/* INIT */
 (async () => {
   try {
     const res = await fetch(apiUrl);
@@ -187,15 +192,23 @@ function closeModal() {
 
     if (!data.result || !data.result.files) return;
 
-    const parsed = data.result.files.map(f => {
-      const info = parseName(f.name);
-      if (!info) return null;
+    const parsed = [];
 
-      return {
+    for (let f of data.result.files) {
+      const info = parseName(f.name);
+      if (!info) continue; // ✅ skip bad files safely
+
+      parsed.push({
         ...info,
         linkid: f.linkid
-      };
-    }).filter(Boolean);
+      });
+    }
+
+    if (parsed.length === 0) {
+      document.getElementById("videoList").innerHTML =
+        "<p class='text-center col-span-full text-gray-400'>No valid episodes found</p>";
+      return;
+    }
 
     const uniqueIds = [...new Set(parsed.map(p => p.malId))];
     const animeMap = {};
@@ -206,11 +219,11 @@ function closeModal() {
 
     allEpisodes = parsed.map(ep => ({
       ...ep,
-      animeTitle: animeMap[ep.malId].title,
-      image: animeMap[ep.malId].image
+      animeTitle: animeMap[ep.malId]?.title || "Unknown",
+      image: animeMap[ep.malId]?.image
     }));
 
-    /* Sort by date */
+    /* SORT */
     allEpisodes.sort((a,b) => b.date - a.date);
 
     filteredEpisodes = allEpisodes;
@@ -219,10 +232,12 @@ function closeModal() {
 
   } catch (err) {
     console.error(err);
+    document.getElementById("videoList").innerHTML =
+      "<p class='text-center col-span-full text-red-400'>Error loading</p>";
   }
 })();
 
-/* Event */
+/* EVENT */
 document.getElementById("searchInput")
   .addEventListener("input", applySearch);
 
