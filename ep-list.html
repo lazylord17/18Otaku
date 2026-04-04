@@ -27,29 +27,51 @@
       class="w-full px-4 py-2 rounded-lg bg-[#1a1a1a] border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[--accent]">
   </div>
 
-  <!-- Status -->
-  <p id="status" class="text-center text-gray-400 mb-6">Loading...</p>
-
   <!-- Grid -->
   <div id="videoList"
     class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
   </div>
 
+  <!-- 🎬 MODAL -->
+  <div id="modal"
+    class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
+
+    <div class="bg-[#111] rounded-xl w-full max-w-5xl overflow-hidden relative">
+
+      <!-- Close -->
+      <button onclick="closeModal()"
+        class="absolute top-3 right-3 text-white text-xl z-10">
+        ✕
+      </button>
+
+      <!-- Title -->
+      <div id="modalTitle"
+        class="p-4 font-semibold text-lg border-b border-gray-800">
+      </div>
+
+      <!-- Player -->
+      <iframe id="modalPlayer"
+        class="w-full h-[500px]"
+        frameborder="0"
+        allowfullscreen>
+      </iframe>
+
+    </div>
+  </div>
+
 <script>
-/* 🔐 Encoded credentials */
 const encodedUser = "Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=";
 const encodedPass = "YnplMDhScExRbGNQdlpS";
 
 const username = atob(encodedUser);
 const password = atob(encodedPass);
 
-/* ✅ Correct endpoint */
 const apiUrl = `https://api.streamtape.com/file/listfolder?login=${username}&key=${password}`;
 
 let allEpisodes = [];
 let filteredEpisodes = [];
 
-/* 🧠 Parse filename */
+/* Parse filename */
 function parseName(name) {
   const regex = /\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/;
   const match = name.match(regex);
@@ -64,7 +86,7 @@ function parseName(name) {
   };
 }
 
-/* 📡 Fetch HD anime data */
+/* Fetch anime (HD image) */
 async function fetchAnime(malId) {
   try {
     const res = await fetch(`https://api.jikan.moe/v4/anime/${malId}`);
@@ -82,7 +104,7 @@ async function fetchAnime(malId) {
   }
 }
 
-/* 🎬 Render UI */
+/* Render */
 function render() {
   const container = document.getElementById("videoList");
   container.innerHTML = "";
@@ -93,9 +115,11 @@ function render() {
     div.className = "relative rounded-xl overflow-hidden group cursor-pointer";
 
     div.innerHTML = `
-      <!-- Poster -->
-      <img src="${ep.image}"
-        class="w-full h-[320px] object-cover">
+      <!-- Poster (FIXED RATIO) -->
+      <div class="aspect-[2/3] w-full">
+        <img src="${ep.image}"
+          class="w-full h-full object-cover">
+      </div>
 
       <!-- Date -->
       <div class="absolute top-2 right-2 bg-black/70 text-xs px-2 py-1 rounded">
@@ -112,20 +136,21 @@ function render() {
         </p>
       </div>
 
-      <!-- Hover Play -->
-      <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-        <button onclick="watch('${ep.linkid}')"
-          class="bg-[--accent] px-4 py-2 rounded-lg text-sm">
-          ▶ Watch
-        </button>
+      <!-- Hover Play Icon -->
+      <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+        <div class="border border-white rounded-full p-4">
+          ▶
+        </div>
       </div>
     `;
+
+    div.onclick = () => openModal(ep);
 
     container.appendChild(div);
   });
 }
 
-/* 🔎 Search */
+/* Search */
 function applySearch() {
   const q = document.getElementById("searchInput").value.toLowerCase();
 
@@ -136,25 +161,33 @@ function applySearch() {
   render();
 }
 
-/* ▶ Watch */
-function watch(id) {
-  window.open(`https://streamtape.com/e/${id}`, "_blank");
+/* Modal */
+function openModal(ep) {
+  document.getElementById("modalTitle").innerText =
+    `${ep.animeTitle} Episode ${ep.episode}`;
+
+  document.getElementById("modalPlayer").src =
+    `https://streamtape.com/e/${ep.linkid}`;
+
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("modal").classList.add("flex");
 }
 
-/* 🚀 Init */
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+  document.getElementById("modal").classList.remove("flex");
+  document.getElementById("modalPlayer").src = "";
+}
+
+/* Init */
 (async () => {
   try {
     const res = await fetch(apiUrl);
     const data = await res.json();
 
-    if (!data.result || !data.result.files) {
-      document.getElementById("status").innerText = "No videos found.";
-      return;
-    }
+    if (!data.result || !data.result.files) return;
 
-    const files = data.result.files;
-
-    const parsed = files.map(f => {
+    const parsed = data.result.files.map(f => {
       const info = parseName(f.name);
       if (!info) return null;
 
@@ -177,23 +210,19 @@ function watch(id) {
       image: animeMap[ep.malId].image
     }));
 
-    /* 📅 Sort newest first */
+    /* Sort by date */
     allEpisodes.sort((a,b) => b.date - a.date);
 
     filteredEpisodes = allEpisodes;
-
-    document.getElementById("status").innerText =
-      `Found ${allEpisodes.length} episode(s)`;
 
     render();
 
   } catch (err) {
     console.error(err);
-    document.getElementById("status").innerText = "Error loading data.";
   }
 })();
 
-/* 🔍 Event */
+/* Event */
 document.getElementById("searchInput")
   .addEventListener("input", applySearch);
 
