@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Anime Episodes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    :root { --accent: #ff4444; }
+  </style>
+</head>
+
+<body class="bg-[#0b0b0b] text-white min-h-screen p-4">
+
+<h1 class="text-2xl font-semibold text-center mb-6">
+  Anime Episodes
+</h1>
+
+<div class="max-w-md mx-auto mb-6">
+  <input id="searchInput" type="text" placeholder="Search..."
+    class="w-full px-3 py-2 rounded bg-[#1a1a1a] border border-gray-700 text-sm">
+</div>
+
+<div id="videoList"
+  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
+</div>
+
+<!-- Modal -->
+<div id="modal"
+  class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50 p-4">
+
+  <div class="bg-[#111] rounded-lg w-full max-w-4xl overflow-hidden relative">
+
+    <button onclick="closeModal()"
+      class="absolute top-3 right-3 text-white text-lg z-10">✕</button>
+
+    <div id="modalTitle"
+      class="p-3 text-sm border-b border-gray-800"></div>
+
+    <iframe id="modalPlayer"
+      class="w-full h-[450px]"
+      frameborder="0"
+      allowfullscreen></iframe>
+
+  </div>
+</div>
+
+<script>
+const apiUrl = `https://api.streamtape.com/file/listfolder?login=${atob("Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=")}&key=${atob("YnplMDhScExRbGNQdlpS")}`;
+
+let allEpisodes = [];
+let filteredEpisodes = [];
+
+/* PARSE */
+function parseName(name) {
+  const mal = name.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+  const tmdb = name.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+
+  if (mal) {
+    return {
+      type: "mal",
+      id: mal[1],
+      episode: parseInt(mal[2]),
+      date: new Date(mal[4])
+    };
+  }
+
+  if (tmdb) {
+    return {
+      type: "tmdb",
+      id: tmdb[1],
+      episode: parseInt(tmdb[2]),
+      date: new Date(tmdb[4])
+    };
+  }
+
+  return null;
+}
+
+/* FORMAT DATE */
+function formatDate(date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric"
+  });
+}
+
+/* AniList */
+async function fetchAniList(id) {
+  const query = `
+  query ($id: Int) {
+    Media(idMal: $id, type: ANIME) {
+      title { romaji }
+      coverImage { extraLarge }
+    }
+  }`;
+
+  const res = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ query, variables:{id:Number(id)} })
+  });
+
+  const json = await res.json();
+  const d = json?.data?.Media;
+
+  if (!d) throw "AniList error";
+
+  return {
+    title: d.title.romaji,
+    image: d.coverImage.extraLarge
+  };
+}
+
+/* TMDB */
+async function fetchTMDB(id) {
+  const key = "e3afd4c89e3351edad9e875ff7a01f0c";
+
+  let res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${key}`);
+  let data = await res.json();
+
+  if (!data || data.success === false) {
+    res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${key}`);
+    data = await res.json();
+  }
+
+  return {
+    title: data.name || data.title || "Unknown",
+    image: data.poster_path
+      ? "https://image.tmdb.org/t/p/w500" + data.poster_path
+      : "https://via.placeholder.com/300x450"
+  };
+}
+
+/* RENDER */
+function render() {
+  const container = document.getElementById("videoList");
+  container.innerHTML = "";
+
+  filteredEpisodes.forEach(ep => {
+    const div = document.createElement("div");
+
+    div.className = "relative group cursor-pointer";
+
+    div.innerHTML = `
+      <div class="aspect-[2/3] overflow-hidden rounded-md">
+        <img src="${ep.image}"
+          class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
+      </div>
+
+      <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1 rounded">
+        ${formatDate(ep.date)}
+      </div>
+
+      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1">
+        <p class="text-xs truncate">${ep.animeTitle}</p>
+        <p class="text-[10px] text-gray-300">Ep ${ep.episode}</p>
+      </div>
+
+      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40">
+        <i class="fa-solid fa-play"></i>
+      </div>
+    `;
+
+    div.onclick = () => openModal(ep);
+
+    container.appendChild(div);
+  });
+}
+
+/* SEARCH */
+function applySearch() {
+  const q = document.getElementById("searchInput").value.toLowerCase();
+
+  filteredEpisodes = allEpisodes.filter(ep =>
+    ep.animeTitle.toLowerCase().includes(q)
+  );
+
+  render();
+}
+
+/* MODAL */
+function openModal(ep) {
+  document.getElementById("modalTitle").innerText =
+    `${ep.animeTitle} Episode ${ep.episode}`;
+
+  document.getElementById("modalPlayer").src =
+    `https://streamtape.com/e/${ep.linkid}`;
+
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("modal").classList.add("flex");
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+  document.getElementById("modal").classList.remove("flex");
+  document.getElementById("modalPlayer").src = "";
+}
+
+/* INIT */
+(async () => {
+  try {
+    const res = await fetch(apiUrl);
+    const data = await res.json();
+
+    const parsed = data.result.files
+      .map(f => {
+        const info = parseName(f.name);
+        if (!info) return null;
+        return { ...info, linkid: f.linkid };
+      })
+      .filter(Boolean);
+
+    const uniqueKeys = [...new Set(parsed.map(p => p.type + p.id))];
+
+    const fetchMap = {};
+
+    /* FAST parallel fetch */
+    await Promise.all(uniqueKeys.map(async key => {
+      const type = key.startsWith("mal") ? "mal" : "tmdb";
+      const id = key.replace(type, "");
+
+      try {
+        fetchMap[key] = type === "mal"
+          ? await fetchAniList(id)
+          : await fetchTMDB(id);
+      } catch {
+        fetchMap[key] = {
+          title: "Unknown",
+          image: "https://via.placeholder.com/300x450"
+        };
+      }
+    }));
+
+    allEpisodes = parsed.map(ep => ({
+      ...ep,
+      animeTitle: fetchMap[ep.type + ep.id]?.title || "Unknown",
+      image: fetchMap[ep.type + ep.id]?.image
+    }));
+
+    allEpisodes.sort((a,b) => b.date - a.date);
+
+    filteredEpisodes = allEpisodes;
+
+    render();
+
+  } catch (err) {
+    console.error(err);
+  }
+})();
+
+document.getElementById("searchInput")
+  .addEventListener("input", applySearch);
+
+</script>
+
+</body>
+</html>
