@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Anime List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    :root {
+      --accent: #ff4444;
+    }
+  </style>
+</head>
+
+<body class="bg-[#0b0b0b] text-white min-h-screen p-4">
+
+<h1 class="text-2xl font-semibold text-center mb-6">Anime List</h1>
+
+<div class="max-w-md mx-auto mb-4">
+  <input id="searchInput" type="text" placeholder="Search..."
+    class="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded text-sm">
+</div>
+
+<div id="animeList"
+  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
+</div>
+
+<script>
+const encodedUser = "Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=";
+const encodedPass = "YnplMDhScExRbGNQdlpS";
+
+const apiUrl = `https://api.streamtape.com/file/listfolder?login=${atob(encodedUser)}&key=${atob(encodedPass)}`;
+
+let allAnime = [];
+
+/* Parse */
+function parseName(name) {
+  const mal = name.match(/\[(\d+)-(\d+)\]/);
+  const tmdb = name.match(/\[TMDB(\d+)-(\d+)\]/);
+
+  if (mal) return { type:"mal", id: mal[1] };
+  if (tmdb) return { type:"tmdb", id: tmdb[1] };
+
+  return null;
+}
+
+/* AniList (NO API KEY NEEDED) */
+async function fetchAniList(malId) {
+  const query = `
+  query ($id: Int) {
+    Media(idMal: $id, type: ANIME) {
+      title { romaji }
+      coverImage { extraLarge }
+      status
+      startDate { year month }
+    }
+  }`;
+
+  const res = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables: { id: Number(malId) } })
+  });
+
+  const json = await res.json();
+
+  if (!json.data) throw "AniList error";
+
+  const d = json.data.Media;
+
+  return {
+    title: d.title.romaji,
+    image: d.coverImage.extraLarge,
+    status: d.status,
+    date: new Date(d.startDate.year, (d.startDate.month||1)-1)
+  };
+}
+
+/* TMDB */
+async function fetchTMDB(id) {
+  const key = "e3afd4c89e3351edad9e875ff7a01f0c";
+
+  const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${key}`);
+  const data = await res.json();
+
+  return {
+    title: data.name,
+    image: "https://image.tmdb.org/t/p/original" + data.poster_path,
+    status: data.status,
+    date: new Date(data.first_air_date)
+  };
+}
+
+/* Render */
+function render(list) {
+  const container = document.getElementById("animeList");
+  container.innerHTML = "";
+
+  list.forEach(anime => {
+    const div = document.createElement("div");
+
+    div.className = "relative group cursor-pointer";
+
+    div.innerHTML = `
+      <div class="aspect-[2/3] overflow-hidden rounded-md">
+        <img src="${anime.image}"
+          class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
+      </div>
+
+      <div class="absolute top-1 left-1 bg-black/70 text-[10px] px-1 rounded">
+        ${anime.count} eps
+      </div>
+
+      <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1 rounded">
+        ${anime.status}
+      </div>
+
+      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
+        <p class="text-sm font-medium truncate">${anime.title}</p>
+        <p class="text-[11px] text-gray-300">
+          ${anime.date.toLocaleDateString("en-US",{month:"short",year:"numeric"})}
+        </p>
+      </div>
+
+      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40">
+        <i class="fa-solid fa-play"></i>
+      </div>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+/* Init */
+(async () => {
+  const res = await fetch(apiUrl);
+  const data = await res.json();
+
+  const map = {};
+
+  for (let f of data.result.files) {
+    const parsed = parseName(f.name);
+    if (!parsed) continue;
+
+    const key = parsed.type + parsed.id;
+
+    if (!map[key]) {
+      map[key] = { ...parsed, count:0 };
+    }
+
+    map[key].count++;
+  }
+
+  const result = [];
+
+  for (let item of Object.values(map)) {
+    try {
+      let details;
+
+      if (item.type === "mal") {
+        details = await fetchAniList(item.id);
+      } else {
+        details = await fetchTMDB(item.id);
+      }
+
+      result.push({ ...item, ...details });
+
+      await new Promise(r => setTimeout(r, 250));
+
+    } catch {
+      console.log("skip", item.id);
+    }
+  }
+
+  result.sort((a,b)=>b.date-a.date);
+
+  allAnime = result;
+  render(allAnime);
+
+})();
+
+/* Search */
+document.getElementById("searchInput")
+.addEventListener("input", e=>{
+  const q = e.target.value.toLowerCase();
+  render(allAnime.filter(a=>a.title.toLowerCase().includes(q)));
+});
+
+</script>
+
+</body>
+</html>
