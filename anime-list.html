@@ -5,7 +5,6 @@
   <title>Anime List</title>
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Font Awesome -->
   <link rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
@@ -34,6 +33,8 @@
   <div class="flex justify-center mb-6">
     <select id="sortSelect"
       class="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded text-sm">
+      <option value="date-desc">Release ↓ (Newest)</option>
+      <option value="date-asc">Release ↑ (Oldest)</option>
       <option value="title-asc">Title A–Z</option>
       <option value="title-desc">Title Z–A</option>
       <option value="episodes-desc">Episodes ↓</option>
@@ -62,12 +63,10 @@ let filteredAnime = [];
 function parseName(name) {
   const regex = /\[(\d+)-(\d+)\]/;
   const match = name.match(regex);
-
   if (!match) return null;
 
   return {
-    malId: match[1],
-    episode: parseInt(match[2])
+    malId: match[1]
   };
 }
 
@@ -80,13 +79,15 @@ async function fetchAnime(id) {
     return {
       title: data.data.title,
       image: data.data.images.jpg.large_image_url,
-      status: data.data.status
+      status: data.data.status,
+      date: new Date(data.data.aired.from)
     };
   } catch {
     return {
       title: "Unknown",
       image: "https://via.placeholder.com/300x450",
-      status: "Unknown"
+      status: "Unknown",
+      date: new Date(0)
     };
   }
 }
@@ -118,8 +119,10 @@ function render() {
       </div>
 
       <!-- Bottom -->
-      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1">
-        <p class="text-xs truncate">${anime.title}</p>
+      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1.5">
+        <p class="text-sm font-medium leading-tight line-clamp-2">
+          ${anime.title}
+        </p>
       </div>
 
       <!-- Hover -->
@@ -152,6 +155,8 @@ function applySort(triggerRender = true) {
   const sort = document.getElementById("sortSelect").value;
 
   filteredAnime.sort((a,b) => {
+    if (sort === "date-desc") return b.date - a.date;
+    if (sort === "date-asc") return a.date - b.date;
     if (sort === "title-asc") return a.title.localeCompare(b.title);
     if (sort === "title-desc") return b.title.localeCompare(a.title);
     if (sort === "episodes-desc") return b.count - a.count;
@@ -195,7 +200,8 @@ function applySort(triggerRender = true) {
         ...animeMap[id],
         title: details.title,
         image: details.image,
-        status: details.status
+        status: details.status,
+        date: details.date
       };
     }
 
@@ -203,7 +209,7 @@ function applySort(triggerRender = true) {
 
     filteredAnime = allAnime;
 
-    applySort();
+    applySort(); // default = newest first
     render();
 
   } catch (err) {
