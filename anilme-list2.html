@@ -9,9 +9,7 @@
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
-    :root {
-      --accent: #ff4444;
-    }
+    :root { --accent: #ff4444; }
   </style>
 </head>
 
@@ -29,10 +27,7 @@
 </div>
 
 <script>
-const encodedUser = "Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=";
-const encodedPass = "YnplMDhScExRbGNQdlpS";
-
-const apiUrl = `https://api.streamtape.com/file/listfolder?login=${atob(encodedUser)}&key=${atob(encodedPass)}`;
+const apiUrl = `https://api.streamtape.com/file/listfolder?login=${atob("Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=")}&key=${atob("YnplMDhScExRbGNQdlpS")}`;
 
 let allAnime = [];
 
@@ -47,8 +42,8 @@ function parseName(name) {
   return null;
 }
 
-/* AniList (NO API KEY NEEDED) */
-async function fetchAniList(malId) {
+/* AniList */
+async function fetchAniList(id) {
   const query = `
   query ($id: Int) {
     Media(idMal: $id, type: ANIME) {
@@ -61,36 +56,44 @@ async function fetchAniList(malId) {
 
   const res = await fetch("https://graphql.anilist.co", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables: { id: Number(malId) } })
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ query, variables:{id:Number(id)} })
   });
 
   const json = await res.json();
+  const d = json?.data?.Media;
 
-  if (!json.data) throw "AniList error";
-
-  const d = json.data.Media;
+  if (!d) throw "AniList error";
 
   return {
     title: d.title.romaji,
     image: d.coverImage.extraLarge,
-    status: d.status,
-    date: new Date(d.startDate.year, (d.startDate.month||1)-1)
+    status: d.status || "Unknown",
+    date: new Date(d.startDate.year || 2000, (d.startDate.month||1)-1)
   };
 }
 
-/* TMDB */
+/* TMDB (FIXED) */
 async function fetchTMDB(id) {
   const key = "e3afd4c89e3351edad9e875ff7a01f0c";
 
-  const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${key}`);
-  const data = await res.json();
+  // Try TV first
+  let res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${key}`);
+  let data = await res.json();
+
+  // fallback to movie
+  if (!data || data.success === false) {
+    res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${key}`);
+    data = await res.json();
+  }
 
   return {
-    title: data.name,
-    image: "https://image.tmdb.org/t/p/original" + data.poster_path,
-    status: data.status,
-    date: new Date(data.first_air_date)
+    title: data.name || data.title || "Unknown",
+    image: data.poster_path
+      ? "https://image.tmdb.org/t/p/w500" + data.poster_path
+      : "https://via.placeholder.com/300x450",
+    status: data.status || "Unknown",
+    date: new Date(data.first_air_date || data.release_date || "2000-01-01")
   };
 }
 
@@ -154,9 +157,7 @@ function render(list) {
     map[key].count++;
   }
 
-  const result = [];
-
-  for (let item of Object.values(map)) {
+  const promises = Object.values(map).map(async item => {
     try {
       let details;
 
@@ -166,14 +167,14 @@ function render(list) {
         details = await fetchTMDB(item.id);
       }
 
-      result.push({ ...item, ...details });
-
-      await new Promise(r => setTimeout(r, 250));
+      return { ...item, ...details };
 
     } catch {
-      console.log("skip", item.id);
+      return null;
     }
-  }
+  });
+
+  const result = (await Promise.all(promises)).filter(Boolean);
 
   result.sort((a,b)=>b.date-a.date);
 
@@ -188,7 +189,6 @@ document.getElementById("searchInput")
   const q = e.target.value.toLowerCase();
   render(allAnime.filter(a=>a.title.toLowerCase().includes(q)));
 });
-
 </script>
 
 </body>
