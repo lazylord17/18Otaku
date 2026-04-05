@@ -33,12 +33,10 @@
   <div class="flex justify-center mb-6">
     <select id="sortSelect"
       class="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded text-sm">
-      <option value="date-desc">Release ↓ (Newest)</option>
-      <option value="date-asc">Release ↑ (Oldest)</option>
+      <option value="date-desc">Release ↓</option>
+      <option value="date-asc">Release ↑</option>
       <option value="title-asc">Title A–Z</option>
       <option value="title-desc">Title Z–A</option>
-      <option value="episodes-desc">Episodes ↓</option>
-      <option value="episodes-asc">Episodes ↑</option>
     </select>
   </div>
 
@@ -61,17 +59,19 @@ let filteredAnime = [];
 
 /* Parse */
 function parseName(name) {
-  const regex = /\[(\d+)-(\d+)\]/;
-  const match = name.match(regex);
+  const match = name.match(/\[(\d+)-(\d+)\]/);
   if (!match) return null;
 
-  return {
-    malId: match[1]
-  };
+  return { malId: match[1] };
 }
 
-/* Fetch MAL */
-async function fetchAnime(id) {
+/* Delay helper */
+function delay(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+/* Fetch with retry */
+async function fetchAnime(id, retries = 2) {
   try {
     const res = await fetch(`https://api.jikan.moe/v4/anime/${id}`);
     const data = await res.json();
@@ -83,6 +83,11 @@ async function fetchAnime(id) {
       date: new Date(data.data.aired.from)
     };
   } catch {
+    if (retries > 0) {
+      await delay(500);
+      return fetchAnime(id, retries - 1);
+    }
+
     return {
       title: "Unknown",
       image: "https://via.placeholder.com/300x450",
@@ -90,6 +95,14 @@ async function fetchAnime(id) {
       date: new Date(0)
     };
   }
+}
+
+/* Format date */
+function formatAired(date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric"
+  });
 }
 
 /* Render */
@@ -104,11 +117,10 @@ function render() {
 
     div.innerHTML = `
       <div class="aspect-[2/3] w-full overflow-hidden rounded-md">
-        <img src="${anime.image}"
-          class="w-full h-full object-cover">
+        <img src="${anime.image}" class="w-full h-full object-cover">
       </div>
 
-      <!-- Episode Count -->
+      <!-- Episode count -->
       <div class="absolute top-1 left-1 bg-black/70 text-[10px] px-1.5 py-0.5 rounded">
         ${anime.count} eps
       </div>
@@ -120,8 +132,11 @@ function render() {
 
       <!-- Bottom -->
       <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1.5">
-        <p class="text-sm font-medium leading-tight line-clamp-2">
+        <p class="text-sm font-medium leading-tight truncate">
           ${anime.title}
+        </p>
+        <p class="text-[11px] text-gray-300">
+          ${formatAired(anime.date)}
         </p>
       </div>
 
@@ -139,32 +154,24 @@ function render() {
   });
 }
 
-/* Search */
-function applySearch() {
+/* Apply search + sort */
+function updateView() {
   const q = document.getElementById("searchInput").value.toLowerCase();
+  const sort = document.getElementById("sortSelect").value;
 
   filteredAnime = allAnime.filter(a =>
     a.title.toLowerCase().includes(q)
   );
-
-  applySort(false);
-}
-
-/* Sort */
-function applySort(triggerRender = true) {
-  const sort = document.getElementById("sortSelect").value;
 
   filteredAnime.sort((a,b) => {
     if (sort === "date-desc") return b.date - a.date;
     if (sort === "date-asc") return a.date - b.date;
     if (sort === "title-asc") return a.title.localeCompare(b.title);
     if (sort === "title-desc") return b.title.localeCompare(a.title);
-    if (sort === "episodes-desc") return b.count - a.count;
-    if (sort === "episodes-asc") return a.count - b.count;
     return 0;
   });
 
-  if (triggerRender) render();
+  render();
 }
 
 /* Init */
@@ -193,8 +200,10 @@ function applySort(triggerRender = true) {
 
     const ids = Object.keys(animeMap);
 
+    // 🔥 FIX: sequential fetch with delay
     for (let id of ids) {
       const details = await fetchAnime(id);
+      await delay(300); // avoid rate limit
 
       animeMap[id] = {
         ...animeMap[id],
@@ -207,10 +216,7 @@ function applySort(triggerRender = true) {
 
     allAnime = Object.values(animeMap);
 
-    filteredAnime = allAnime;
-
-    applySort(); // default = newest first
-    render();
+    updateView();
 
   } catch (err) {
     console.error(err);
@@ -219,10 +225,10 @@ function applySort(triggerRender = true) {
 
 /* Events */
 document.getElementById("searchInput")
-  .addEventListener("input", applySearch);
+  .addEventListener("input", updateView);
 
 document.getElementById("sortSelect")
-  .addEventListener("change", applySort);
+  .addEventListener("change", updateView);
 
 </script>
 
