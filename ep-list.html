@@ -49,20 +49,19 @@
 </div>
 
 <script>
-const apiUrl = `https://api.streamtape.com/file/listfolder?login=${atob("Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=")}&key=${atob("YnplMDhScExRbGNQdlpS")}`;
+const JSON_URL = "https://github.com/lazylord17/streamtape-json/blob/main/streamtape_videos.json";
 
 let allEpisodes = [];
 let filteredEpisodes = [];
 
-/* ✅ FIXED PARSER (safe) */
+/* PARSER (SAFE) */
 function parseName(name) {
   try {
     const uncensored = /\[Uncen\]/i.test(name);
+    const clean = name.replace(/\[Uncen\]/i, "").trim();
 
-    const cleanName = name.replace(/\[Uncen\]/i, "").trim();
-
-    const mal = cleanName.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
-    const tmdb = cleanName.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+    const mal = clean.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+    const tmdb = clean.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
 
     if (mal) {
       return {
@@ -90,7 +89,7 @@ function parseName(name) {
   }
 }
 
-/* FORMAT DATE */
+/* DATE */
 function formatDate(date) {
   return date.toLocaleDateString("en-US", {
     month: "short",
@@ -153,7 +152,6 @@ function render() {
 
   filteredEpisodes.forEach(ep => {
     const div = document.createElement("div");
-
     div.className = "relative group cursor-pointer";
 
     div.innerHTML = `
@@ -162,7 +160,7 @@ function render() {
           class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
       </div>
 
-      <!-- ✅ CENSOR BADGE -->
+      <!-- Badge -->
       <div class="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium
         ${ep.uncensored ? 'bg-green-600' : 'bg-red-600'}">
         ${ep.uncensored ? 'Uncensored' : 'Censored'}
@@ -183,7 +181,6 @@ function render() {
     `;
 
     div.onclick = () => openModal(ep);
-
     container.appendChild(div);
   });
 }
@@ -204,8 +201,9 @@ function openModal(ep) {
   document.getElementById("modalTitle").innerText =
     `${ep.animeTitle} Episode ${ep.episode}`;
 
+  // ✅ dynamic domain + red color
   document.getElementById("modalPlayer").src =
-    `https://streamtape.com/e/${ep.linkid}`;
+    `https://streamtape.com/e/${ep.vidcode}?color=255,68,68`;
 
   document.getElementById("modal").classList.remove("hidden");
   document.getElementById("modal").classList.add("flex");
@@ -220,19 +218,18 @@ function closeModal() {
 /* INIT */
 (async () => {
   try {
-    const res = await fetch(apiUrl);
+    const res = await fetch(JSON_URL);
     const data = await res.json();
 
-    const parsed = data.result.files
+    const parsed = data.files
       .map(f => {
-        const info = parseName(f.name);
+        const info = parseName(f.title);
         if (!info) return null;
-        return { ...info, linkid: f.linkid };
+        return { ...info, vidcode: f.vidcode };
       })
       .filter(Boolean);
 
     const uniqueKeys = [...new Set(parsed.map(p => p.type + p.id))];
-
     const fetchMap = {};
 
     await Promise.all(uniqueKeys.map(async key => {
