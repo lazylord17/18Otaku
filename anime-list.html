@@ -3,232 +3,209 @@
 <head>
   <meta charset="UTF-8">
   <title>Anime List</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
 
   <link rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
-    :root {
-      --accent: #ff4444;
-    }
+    :root { --accent: #ff4444; }
   </style>
 </head>
 
 <body class="bg-[#0b0b0b] text-white min-h-screen p-4">
 
-  <h1 class="text-2xl font-semibold text-center mb-6">
-    Anime List
-  </h1>
+<h1 class="text-2xl font-semibold text-center mb-6">Anime List</h1>
 
-  <!-- Search -->
-  <div class="max-w-md mx-auto mb-4">
-    <input id="searchInput"
-      type="text"
-      placeholder="Search anime..."
-      class="w-full px-3 py-2 rounded bg-[#1a1a1a] border border-gray-700 focus:outline-none focus:ring-1 focus:ring-[--accent] text-sm">
-  </div>
+<!-- Search -->
+<div class="max-w-md mx-auto mb-4">
+  <input id="searchInput" type="text" placeholder="Search..."
+    class="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded text-sm">
+</div>
 
-  <!-- Sort -->
-  <div class="flex justify-center mb-6">
-    <select id="sortSelect"
-      class="px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded text-sm">
-      <option value="date-desc">Release ↓</option>
-      <option value="date-asc">Release ↑</option>
-      <option value="title-asc">Title A–Z</option>
-      <option value="title-desc">Title Z–A</option>
-    </select>
-  </div>
-
-  <!-- Grid -->
-  <div id="animeList"
-    class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
-  </div>
+<!-- Grid -->
+<div id="animeList"
+  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
+</div>
 
 <script>
-const encodedUser = "Y2VlZDRmZWM2ZjU1MWY0Y2NjNWI=";
-const encodedPass = "YnplMDhScExRbGNQdlpS";
 
-const username = atob(encodedUser);
-const password = atob(encodedPass);
-
-const apiUrl = `https://api.streamtape.com/file/listfolder?login=${username}&key=${password}`;
+/* ✅ JSON SOURCE */
+const JSON_URL = "https://raw.githubusercontent.com/lazylord17/streamtape-json/main/streamtape_videos.json";
 
 let allAnime = [];
-let filteredAnime = [];
 
-/* Parse */
+/* PARSE */
 function parseName(name) {
-  const match = name.match(/\[(\d+)-(\d+)\]/);
-  if (!match) return null;
+  const mal = name.match(/\[(\d+)-(\d+)\]/);
+  const tmdb = name.match(/\[TMDB(\d+)-(\d+)\]/);
 
-  return { malId: match[1] };
+  if (mal) return { type:"mal", id: mal[1] };
+  if (tmdb) return { type:"tmdb", id: tmdb[1] };
+
+  return null;
 }
 
-/* Delay helper */
-function delay(ms) {
-  return new Promise(res => setTimeout(res, ms));
-}
-
-/* Fetch with retry */
-async function fetchAnime(id, retries = 2) {
-  try {
-    const res = await fetch(`https://api.jikan.moe/v4/anime/${id}`);
-    const data = await res.json();
-
-    return {
-      title: data.data.title,
-      image: data.data.images.jpg.large_image_url,
-      status: data.data.status,
-      date: new Date(data.data.aired.from)
-    };
-  } catch {
-    if (retries > 0) {
-      await delay(500);
-      return fetchAnime(id, retries - 1);
+/* AniList */
+async function fetchAniList(id) {
+  const query = `
+  query ($id: Int) {
+    Media(idMal: $id, type: ANIME) {
+      title { romaji }
+      coverImage { extraLarge }
+      status
+      startDate { year month }
     }
+  }`;
 
-    return {
-      title: "Unknown",
-      image: "https://via.placeholder.com/300x450",
-      status: "Unknown",
-      date: new Date(0)
-    };
-  }
-}
-
-/* Format date */
-function formatAired(date) {
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric"
+  const res = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ query, variables:{id:Number(id)} })
   });
+
+  const json = await res.json();
+  const d = json?.data?.Media;
+
+  if (!d) throw "AniList error";
+
+  return {
+    title: d.title.romaji,
+    image: d.coverImage.extraLarge,
+    status: d.status || "Unknown",
+    date: new Date(d.startDate.year || 2000, (d.startDate.month||1)-1)
+  };
 }
 
-/* Render */
-function render() {
+/* TMDB */
+async function fetchTMDB(id) {
+  const key = "e3afd4c89e3351edad9e875ff7a01f0c";
+
+  let res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${key}`);
+  let data = await res.json();
+
+  if (!data || data.success === false) {
+    res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${key}`);
+    data = await res.json();
+  }
+
+  return {
+    title: data.name || data.title || "Unknown",
+    image: data.poster_path
+      ? "https://image.tmdb.org/t/p/w500" + data.poster_path
+      : "https://via.placeholder.com/300x450",
+    status: data.status || "Unknown",
+    date: new Date(data.first_air_date || data.release_date || "2000-01-01")
+  };
+}
+
+/* RENDER */
+function render(list) {
   const container = document.getElementById("animeList");
   container.innerHTML = "";
 
-  filteredAnime.forEach(anime => {
+  list.forEach(anime => {
     const div = document.createElement("div");
 
     div.className = "relative group cursor-pointer";
 
     div.innerHTML = `
-      <div class="aspect-[2/3] w-full overflow-hidden rounded-md">
-        <img src="${anime.image}" class="w-full h-full object-cover">
+      <div class="aspect-[2/3] overflow-hidden rounded-md">
+        <img src="${anime.image}"
+          class="w-full h-full object-cover">
       </div>
 
-      <!-- Episode count -->
-      <div class="absolute top-1 left-1 bg-black/70 text-[10px] px-1.5 py-0.5 rounded">
+      <!-- Episodes -->
+      <div class="absolute top-1 left-1 bg-black/70 text-[10px] px-1 rounded">
         ${anime.count} eps
       </div>
 
       <!-- Status -->
-      <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1.5 py-0.5 rounded">
+      <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1 rounded">
         ${anime.status}
       </div>
 
       <!-- Bottom -->
-      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1.5">
-        <p class="text-sm font-medium leading-tight truncate">
-          ${anime.title}
-        </p>
+      <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
+        <p class="text-sm font-medium truncate">${anime.title}</p>
         <p class="text-[11px] text-gray-300">
-          ${formatAired(anime.date)}
+          ${anime.date.toLocaleDateString("en-US",{month:"short",year:"numeric"})}
         </p>
       </div>
 
       <!-- Hover -->
-      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 transition">
-        <i class="fa-solid fa-play text-white text-lg"></i>
+      <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40">
+        <i class="fa-solid fa-play"></i>
       </div>
     `;
 
+    /* 👉 future anime page */
     div.onclick = () => {
-      window.location.href = `anime.html?id=${anime.malId}`;
+      window.location.href = `anime.html?id=${anime.id}`;
     };
 
     container.appendChild(div);
   });
 }
 
-/* Apply search + sort */
-function updateView() {
-  const q = document.getElementById("searchInput").value.toLowerCase();
-  const sort = document.getElementById("sortSelect").value;
-
-  filteredAnime = allAnime.filter(a =>
-    a.title.toLowerCase().includes(q)
-  );
-
-  filteredAnime.sort((a,b) => {
-    if (sort === "date-desc") return b.date - a.date;
-    if (sort === "date-asc") return a.date - b.date;
-    if (sort === "title-asc") return a.title.localeCompare(b.title);
-    if (sort === "title-desc") return b.title.localeCompare(a.title);
-    return 0;
-  });
-
-  render();
-}
-
-/* Init */
+/* INIT */
 (async () => {
   try {
-    const res = await fetch(apiUrl);
+    const res = await fetch(JSON_URL);
     const data = await res.json();
 
-    if (!data.result || !data.result.files) return;
+    const map = {};
 
-    const animeMap = {};
+    data.files.forEach(f => {
+      const parsed = parseName(f.title);
+      if (!parsed) return;
 
-    for (let file of data.result.files) {
-      const parsed = parseName(file.name);
-      if (!parsed) continue;
+      const key = parsed.type + parsed.id;
 
-      if (!animeMap[parsed.malId]) {
-        animeMap[parsed.malId] = {
-          malId: parsed.malId,
-          count: 0
-        };
+      if (!map[key]) {
+        map[key] = { ...parsed, count:0 };
       }
 
-      animeMap[parsed.malId].count++;
-    }
+      map[key].count++;
+    });
 
-    const ids = Object.keys(animeMap);
+    const unique = Object.values(map);
 
-    // 🔥 FIX: sequential fetch with delay
-    for (let id of ids) {
-      const details = await fetchAnime(id);
-      await delay(300); // avoid rate limit
+    /* 🚀 PARALLEL FETCH (FAST) */
+    const result = await Promise.all(unique.map(async item => {
+      try {
+        const details = item.type === "mal"
+          ? await fetchAniList(item.id)
+          : await fetchTMDB(item.id);
 
-      animeMap[id] = {
-        ...animeMap[id],
-        title: details.title,
-        image: details.image,
-        status: details.status,
-        date: details.date
-      };
-    }
+        return { ...item, ...details };
 
-    allAnime = Object.values(animeMap);
+      } catch {
+        return null;
+      }
+    }));
 
-    updateView();
+    allAnime = result.filter(Boolean);
+
+    /* SORT */
+    allAnime.sort((a,b)=>b.date-a.date);
+
+    render(allAnime);
 
   } catch (err) {
     console.error(err);
+    document.getElementById("animeList").innerHTML =
+      "<p class='text-center col-span-full text-red-400'>Failed to load</p>";
   }
 })();
 
-/* Events */
+/* SEARCH */
 document.getElementById("searchInput")
-  .addEventListener("input", updateView);
-
-document.getElementById("sortSelect")
-  .addEventListener("change", updateView);
+.addEventListener("input", e=>{
+  const q = e.target.value.toLowerCase();
+  render(allAnime.filter(a=>a.title.toLowerCase().includes(q)));
+});
 
 </script>
 
