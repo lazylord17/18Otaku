@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Anime Episodes</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
 
   <link rel="stylesheet"
@@ -19,11 +20,13 @@
   Anime Episodes
 </h1>
 
+<!-- Search -->
 <div class="max-w-md mx-auto mb-6">
   <input id="searchInput" type="text" placeholder="Search..."
     class="w-full px-3 py-2 rounded bg-[#1a1a1a] border border-gray-700 text-sm">
 </div>
 
+<!-- Grid -->
 <div id="videoList"
   class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
 </div>
@@ -49,49 +52,48 @@
 </div>
 
 <script>
-const JSON_URL = "https://github.com/lazylord17/streamtape-json/blob/main/streamtape_videos.json";
+
+/* ✅ YOUR JSON SOURCE (FIXED) */
+const JSON_URL = "https://raw.githubusercontent.com/lazylord17/streamtape-json/main/streamtape_videos.json";
 
 let allEpisodes = [];
 let filteredEpisodes = [];
 
-/* PARSER (SAFE) */
+/* PARSE */
 function parseName(name) {
-  try {
-    const uncensored = /\[Uncen\]/i.test(name);
-    const clean = name.replace(/\[Uncen\]/i, "").trim();
+  const uncensored = /\[Uncen\]/i.test(name);
 
-    const mal = clean.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
-    const tmdb = clean.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+  const clean = name.replace(/\[Uncen\]/i, "");
 
-    if (mal) {
-      return {
-        type: "mal",
-        id: mal[1],
-        episode: parseInt(mal[2]),
-        date: new Date(mal[4]),
-        uncensored
-      };
-    }
+  const mal = clean.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+  const tmdb = clean.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
 
-    if (tmdb) {
-      return {
-        type: "tmdb",
-        id: tmdb[1],
-        episode: parseInt(tmdb[2]),
-        date: new Date(tmdb[4]),
-        uncensored
-      };
-    }
-
-    return null;
-  } catch {
-    return null;
+  if (mal) {
+    return {
+      type: "mal",
+      id: mal[1],
+      episode: +mal[2],
+      date: new Date(mal[4]),
+      uncensored
+    };
   }
+
+  if (tmdb) {
+    return {
+      type: "tmdb",
+      id: tmdb[1],
+      episode: +tmdb[2],
+      date: new Date(tmdb[4]),
+      uncensored
+    };
+  }
+
+  return null;
 }
 
 /* DATE */
-function formatDate(date) {
-  return date.toLocaleDateString("en-US", {
+function formatDate(d) {
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "2-digit",
     year: "numeric"
@@ -152,35 +154,40 @@ function render() {
 
   filteredEpisodes.forEach(ep => {
     const div = document.createElement("div");
+
     div.className = "relative group cursor-pointer";
 
     div.innerHTML = `
       <div class="aspect-[2/3] overflow-hidden rounded-md">
         <img src="${ep.image}"
-          class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
+          class="w-full h-full object-cover">
       </div>
 
-      <!-- Badge -->
+      <!-- Censor -->
       <div class="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium
         ${ep.uncensored ? 'bg-green-600' : 'bg-red-600'}">
         ${ep.uncensored ? 'Uncensored' : 'Censored'}
       </div>
 
+      <!-- Date -->
       <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1 rounded">
         ${formatDate(ep.date)}
       </div>
 
+      <!-- Bottom -->
       <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1">
         <p class="text-xs truncate">${ep.animeTitle}</p>
         <p class="text-[10px] text-gray-300">Ep ${ep.episode}</p>
       </div>
 
+      <!-- Hover -->
       <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40">
-        <i class="fa-solid fa-play"></i>
+        <i class="fa-solid fa-play text-white"></i>
       </div>
     `;
 
     div.onclick = () => openModal(ep);
+
     container.appendChild(div);
   });
 }
@@ -201,7 +208,6 @@ function openModal(ep) {
   document.getElementById("modalTitle").innerText =
     `${ep.animeTitle} Episode ${ep.episode}`;
 
-  // ✅ dynamic domain + red color
   document.getElementById("modalPlayer").src =
     `https://streamtape.com/e/${ep.vidcode}?color=255,68,68`;
 
@@ -221,27 +227,30 @@ function closeModal() {
     const res = await fetch(JSON_URL);
     const data = await res.json();
 
-    const parsed = data.files
-      .map(f => {
-        const info = parseName(f.title);
-        if (!info) return null;
-        return { ...info, vidcode: f.vidcode };
-      })
-      .filter(Boolean);
+    const parsed = data.files.map(f => {
+      const info = parseName(f.title);
+      if (!info) return null;
 
-    const uniqueKeys = [...new Set(parsed.map(p => p.type + p.id))];
-    const fetchMap = {};
+      return {
+        ...info,
+        vidcode: f.vidcode
+      };
+    }).filter(Boolean);
 
-    await Promise.all(uniqueKeys.map(async key => {
+    const unique = [...new Set(parsed.map(p => p.type + p.id))];
+
+    const map = {};
+
+    await Promise.all(unique.map(async key => {
       const type = key.startsWith("mal") ? "mal" : "tmdb";
       const id = key.replace(type, "");
 
       try {
-        fetchMap[key] = type === "mal"
+        map[key] = type === "mal"
           ? await fetchAniList(id)
           : await fetchTMDB(id);
       } catch {
-        fetchMap[key] = {
+        map[key] = {
           title: "Unknown",
           image: "https://via.placeholder.com/300x450"
         };
@@ -250,8 +259,8 @@ function closeModal() {
 
     allEpisodes = parsed.map(ep => ({
       ...ep,
-      animeTitle: fetchMap[ep.type + ep.id]?.title || "Unknown",
-      image: fetchMap[ep.type + ep.id]?.image
+      animeTitle: map[ep.type + ep.id]?.title || "Unknown",
+      image: map[ep.type + ep.id]?.image
     }));
 
     allEpisodes.sort((a,b) => b.date - a.date);
@@ -262,6 +271,8 @@ function closeModal() {
 
   } catch (err) {
     console.error(err);
+    document.getElementById("videoList").innerHTML =
+      "<p class='text-center col-span-full text-red-400'>Failed to load JSON</p>";
   }
 })();
 
