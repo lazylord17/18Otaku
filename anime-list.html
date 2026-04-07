@@ -4,79 +4,80 @@
   <meta charset="UTF-8">
   <title>Anime List</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     :root { --accent: #ff4444; }
   </style>
 </head>
 <body class="bg-[#0b0b0b] text-white min-h-screen p-4">
 
-<h1 class="text-2xl font-semibold text-center mb-4">Anime List</h1>
+<h1 class="text-2xl font-semibold text-center mb-6">Anime List</h1>
+
 <div class="max-w-md mx-auto mb-4">
   <input id="searchInput" type="text" placeholder="Search..."
     class="w-full px-3 py-2 bg-[#1a1a1a] border border-gray-700 rounded text-sm">
 </div>
 
-<div id="animeList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4"></div>
+<div id="animeList"
+  class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-4">
+</div>
 
 <script>
-const JSON_URL = "https://raw.githubusercontent.com/lazylord17/streamtape-json/main/streamtape_videos.json";
-const CACHE_KEY = "anime_cache_v1";
+const jsonUrl = "https://raw.githubusercontent.com/lazylord17/streamtape-json/main/streamtape_videos.json";
 
 let allAnime = [];
-const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
 
-/* Parse title */
+/* Parse IDs from filename */
 function parseName(name) {
-  const mal = name.match(/\[(\d+)-(\d+)\]/);
   const tmdb = name.match(/\[TMDB(\d+)-(\d+)\]/);
-  if (mal) return { type: "mal", id: mal[1] };
-  if (tmdb) return { type: "tmdb", id: tmdb[1] };
+  const mal = name.match(/\[(\d+)-(\d+)\]/);
+  if (tmdb) return { type:"tmdb", id: tmdb[1] };
+  if (mal) return { type:"mal", id: mal[1] };
   return null;
 }
 
-/* AniList fetch with retry + fallback */
-async function fetchAniList(id, retries = 3) {
-  try {
-    const query = `
-    query ($id: Int) {
-      Media(idMal: $id, type: ANIME) {
-        title { romaji }
-        coverImage { extraLarge }
-        status
-        startDate { year month }
-      }
-    }`;
-    const res = await fetch("https://graphql.anilist.co", {
-      method: "POST",
-      headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ query, variables: { id: Number(id) } })
-    });
-    const json = await res.json();
-    const d = json?.data?.Media;
-    if (!d) throw "AniList fail";
-    return {
-      title: d.title.romaji,
-      image: d.coverImage.extraLarge,
-      status: d.status || "Unknown",
-      date: new Date(d.startDate.year || 2000, (d.startDate.month||1)-1)
-    };
-  } catch (err) {
-    if (retries > 0) {
-      await new Promise(r => setTimeout(r, 300));
-      return fetchAniList(id, retries - 1);
+/* AniList fetch */
+async function fetchAniList(id) {
+  const cached = localStorage.getItem("anilist_" + id);
+  if (cached) return JSON.parse(cached);
+
+  const query = `
+  query ($id: Int) {
+    Media(idMal: $id, type: ANIME) {
+      title { romaji }
+      coverImage { extraLarge }
+      status
+      startDate { year month }
     }
-    return {
-      title: "Unknown",
-      image: "https://via.placeholder.com/300x450",
-      status: "Unknown",
-      date: new Date(0)
-    };
-  }
+  }`;
+
+  const res = await fetch("https://graphql.anilist.co", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ query, variables:{ id:Number(id) } })
+  });
+
+  const json = await res.json();
+  const d = json?.data?.Media;
+  if (!d) throw "AniList error";
+
+  const obj = {
+    title: d.title.romaji,
+    image: d.coverImage.extraLarge,
+    status: d.status || "Unknown",
+    date: new Date(d.startDate.year||2000,(d.startDate.month||1)-1)
+  };
+
+  localStorage.setItem("anilist_" + id, JSON.stringify(obj));
+  return obj;
 }
 
 /* TMDB fetch */
 async function fetchTMDB(id) {
+  const cached = localStorage.getItem("tmdb_" + id);
+  if (cached) return JSON.parse(cached);
+
   const key = "e3afd4c89e3351edad9e875ff7a01f0c";
   let res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${key}`);
   let data = await res.json();
@@ -84,100 +85,95 @@ async function fetchTMDB(id) {
     res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${key}`);
     data = await res.json();
   }
-  return {
+
+  const obj = {
     title: data.name || data.title || "Unknown",
-    image: data.poster_path ? "https://image.tmdb.org/t/p/w500" + data.poster_path : "https://via.placeholder.com/300x450",
+    image: data.poster_path
+      ? "https://image.tmdb.org/t/p/w500" + data.poster_path
+      : "https://via.placeholder.com/300x450",
     status: data.status || "Unknown",
-    date: new Date(data.first_air_date || data.release_date || "2000-01-01")
+    date: new Date(data.first_air_date||data.release_date||"2000-01-01")
   };
+
+  localStorage.setItem("tmdb_" + id, JSON.stringify(obj));
+  return obj;
 }
 
-/* Render anime grid */
+/* Render anime list */
 function render(list) {
   const container = document.getElementById("animeList");
   container.innerHTML = "";
 
-  list.forEach(anime => {
+  list.forEach(anime=>{
     const div = document.createElement("div");
     div.className = "relative group cursor-pointer";
 
-    const linkId = anime.type === "tmdb" ? "TMDB" + anime.id : anime.id;
-
-    div.onclick = () => {
-      window.location.href = `anime.html?id=${linkId}`;
-    };
+    const animeUrl = anime.type==="tmdb" ? `anime.html?id=TMDB${anime.id}` : `anime.html?id=${anime.id}`;
 
     div.innerHTML = `
+      <a href="${animeUrl}">
       <div class="aspect-[2/3] overflow-hidden rounded-md">
-        <img src="${anime.image}" loading="lazy"
-          class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
+        <img src="${anime.image}" class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
       </div>
-
       <div class="absolute top-1 left-1 bg-black/70 text-[10px] px-1 rounded">${anime.count} eps</div>
       <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1 rounded">${anime.status}</div>
-
       <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm px-2 py-1">
         <p class="text-sm font-medium truncate">${anime.title}</p>
         <p class="text-[11px] text-gray-300">
-          ${anime.date.toLocaleDateString("en-US",{month:"short", year:"numeric"})}
+          ${anime.date.toLocaleDateString("en-US",{month:"short",year:"numeric"})}
         </p>
       </div>
-
       <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40">
         <i class="fa-solid fa-play"></i>
       </div>
+      </a>
     `;
 
     container.appendChild(div);
   });
 }
 
-/* Initialize */
-(async () => {
-  const res = await fetch(JSON_URL);
-  const data = await res.json();
+/* INIT */
+(async()=>{
+  try {
+    const res = await fetch(jsonUrl);
+    const data = await res.json();
 
-  const map = {};
-  data.files.forEach(f => {
-    const parsed = parseName(f.title);
-    if (!parsed) return;
-
-    const key = parsed.type + parsed.id;
-    if (!map[key]) map[key] = { ...parsed, count: 0 };
-    map[key].count++;
-  });
-
-  const result = [];
-  for (let item of Object.values(map)) {
-    const key = item.type + item.id;
-
-    if (cache[key]) {
-      result.push({ ...item, ...cache[key] });
-      continue;
+    const map = {};
+    for(let f of data.files){
+      const parsed = parseName(f.title);
+      if(!parsed) continue;
+      const key = parsed.type + parsed.id;
+      if(!map[key]) map[key] = { ...parsed, count:0 };
+      map[key].count++;
     }
 
-    try {
-      const details = item.type === "mal" ? await fetchAniList(item.id) : await fetchTMDB(item.id);
-      cache[key] = details;
-      result.push({ ...item, ...details });
-    } catch {
-      result.push({ ...item, title:"Unknown", image:"https://via.placeholder.com/300x450", status:"Unknown", date: new Date(0) });
-    }
+    const promises = Object.values(map).map(async item=>{
+      try{
+        const details = item.type==="mal" ? await fetchAniList(item.id) : await fetchTMDB(item.id);
+        return {...item,...details};
+      } catch {
+        return {...item, title:"Unknown", image:"https://via.placeholder.com/300x450", status:"Unknown", date:new Date("2000-01-01")};
+      }
+    });
+
+    const result = (await Promise.all(promises)).filter(Boolean);
+    result.sort((a,b)=>b.date-a.date);
+
+    allAnime = result;
+    render(allAnime);
+
+  } catch(err){
+    console.error(err);
+    document.getElementById("animeList").innerHTML="<p class='text-center text-red-400 col-span-full'>Failed to load anime list</p>";
   }
-
-  localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-
-  result.sort((a,b)=>b.date-a.date);
-  allAnime = result;
-  render(allAnime);
 })();
 
-/* Search */
-document.getElementById("searchInput").addEventListener("input", e => {
+/* SEARCH */
+document.getElementById("searchInput").addEventListener("input",e=>{
   const q = e.target.value.toLowerCase();
-  render(allAnime.filter(a => a.title.toLowerCase().includes(q)));
+  render(allAnime.filter(a=>a.title.toLowerCase().includes(q)));
 });
 </script>
-
 </body>
 </html>
