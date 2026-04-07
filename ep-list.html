@@ -54,34 +54,40 @@ const apiUrl = `https://api.streamtape.com/file/listfolder?login=${atob("Y2VlZDR
 let allEpisodes = [];
 let filteredEpisodes = [];
 
-/* PARSE */
+/* ✅ FIXED PARSER (safe) */
 function parseName(name) {
-  const mal = name.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
-  const tmdb = name.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+  try {
+    const uncensored = /\[Uncen\]/i.test(name);
 
-  const uncensored = /\[Uncen\]/i.test(name); // ✅ NEW
+    const cleanName = name.replace(/\[Uncen\]/i, "").trim();
 
-  if (mal) {
-    return {
-      type: "mal",
-      id: mal[1],
-      episode: parseInt(mal[2]),
-      date: new Date(mal[4]),
-      uncensored
-    };
+    const mal = cleanName.match(/\[(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+    const tmdb = cleanName.match(/\[TMDB(\d+)-(\d+)\]\s*\[(.*?)\]\s*\[(.*?)\]/);
+
+    if (mal) {
+      return {
+        type: "mal",
+        id: mal[1],
+        episode: parseInt(mal[2]),
+        date: new Date(mal[4]),
+        uncensored
+      };
+    }
+
+    if (tmdb) {
+      return {
+        type: "tmdb",
+        id: tmdb[1],
+        episode: parseInt(tmdb[2]),
+        date: new Date(tmdb[4]),
+        uncensored
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
   }
-
-  if (tmdb) {
-    return {
-      type: "tmdb",
-      id: tmdb[1],
-      episode: parseInt(tmdb[2]),
-      date: new Date(tmdb[4]),
-      uncensored
-    };
-  }
-
-  return null;
 }
 
 /* FORMAT DATE */
@@ -156,18 +162,16 @@ function render() {
           class="w-full h-full object-cover scale-105 group-hover:scale-110 transition">
       </div>
 
-      <!-- CENSOR BADGE -->
+      <!-- ✅ CENSOR BADGE -->
       <div class="absolute top-1 left-1 text-[10px] px-1.5 py-0.5 rounded font-medium
         ${ep.uncensored ? 'bg-green-600' : 'bg-red-600'}">
         ${ep.uncensored ? 'Uncensored' : 'Censored'}
       </div>
 
-      <!-- Date -->
       <div class="absolute top-1 right-1 bg-black/70 text-[10px] px-1 rounded">
         ${formatDate(ep.date)}
       </div>
 
-      <!-- Bottom -->
       <div class="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-1">
         <p class="text-xs truncate">${ep.animeTitle}</p>
         <p class="text-[10px] text-gray-300">Ep ${ep.episode}</p>
