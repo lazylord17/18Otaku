@@ -12,7 +12,9 @@
 
   <script>
     const JSON_URL = "https://raw.githubusercontent.com/lazylord17/streamtape-json/main/streamtape_videos.json";
-    const TMDB_KEY = process.env.TMDB_API_KEY; // Replace with your TMDB API key
+
+    // 🔴 PUT YOUR REAL TMDB KEY HERE
+    const TMDB_KEY = "YOUR_REAL_TMDB_API_KEY";
 
     const container = document.getElementById("container");
     const seen = new Set();
@@ -23,6 +25,7 @@
     async function getAniListTitle(mal_id, anilist_id) {
       try {
         let query, variables;
+
         if (mal_id) {
           query = `
             query ($idMal: Int) {
@@ -46,47 +49,36 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, variables })
         });
+
         const json = await res.json();
         const media = json.data?.Media;
+
         return media?.title?.english || media?.title?.romaji || null;
       } catch {
         return null;
       }
     }
 
-    // ---------------- TMDB Movie ----------------
-    async function getTMDBMovie(id) {
+    // ---------------- TMDB (Movie + TV fallback) ----------------
+    async function getTMDB(id) {
       try {
-        const res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_KEY}`);
-        const data = await res.json();
-        if (data.success === false) return null;
-        return data.title || null;
-      } catch {
-        return null;
-      }
-    }
+        // Try movie
+        let res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_KEY}`);
+        let data = await res.json();
 
-    // ---------------- TMDB Series ----------------
-    async function getTMDBSeries(id) {
-      try {
-        const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_KEY}`);
-        const data = await res.json();
-        if (data.success === false) return null;
-        return data.name || null;
-      } catch {
-        return null;
-      }
-    }
-
-    // ---------------- TMDB Search fallback ----------------
-    async function searchTMDB(query) {
-      try {
-        const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          const item = data.results[0];
-          return item.title || item.name || null;
+        if (!data.success) {
+          if (data.title) return data.title;
         }
+
+        // Try TV
+        res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_KEY}`);
+        data = await res.json();
+
+        if (!data.success) {
+          if (data.name) return data.name;
+        }
+
+        return null;
       } catch {
         return null;
       }
@@ -94,53 +86,53 @@
 
     // ---------------- Load Anime ----------------
     async function loadAnime() {
-      const res = await fetch(JSON_URL);
-      const data = await res.json();
+      try {
+        const res = await fetch(JSON_URL);
+        const data = await res.json();
 
-      for (const file of data.files) {
-        const uniqueId = file.mal_id || file.anilist_id || file.tmdb_id || file.tmdbs_id;
-        if (!uniqueId || seen.has(uniqueId)) continue;
-        seen.add(uniqueId);
+        for (const file of data.files) {
+          const uniqueId =
+            file.mal_id ||
+            file.anilist_id ||
+            file.tmdb_id ||
+            file.tmdbs_id;
 
-        if (cache.has(uniqueId)) {
-          render(cache.get(uniqueId));
-          continue;
+          if (!uniqueId || seen.has(uniqueId)) continue;
+          seen.add(uniqueId);
+
+          // Cache check
+          if (cache.has(uniqueId)) {
+            render(cache.get(uniqueId));
+            continue;
+          }
+
+          let title = null;
+
+          // 1️⃣ AniList
+          if (file.mal_id || file.anilist_id) {
+            title = await getAniListTitle(file.mal_id, file.anilist_id);
+            await sleep(120);
+          }
+
+          // 2️⃣ TMDB fallback
+          if (!title && (file.tmdb_id || file.tmdbs_id)) {
+            const id = file.tmdb_id || file.tmdbs_id;
+            title = await getTMDB(id);
+            await sleep(120);
+          }
+
+          // 3️⃣ Final fallback
+          if (!title) {
+            console.log("❌ Failed item:", file);
+            title = "Unknown Anime";
+          }
+
+          cache.set(uniqueId, title);
+          render(title);
         }
 
-        let title = null;
-
-        // 1️⃣ AniList
-        if (file.mal_id || file.anilist_id) {
-          title = await getAniListTitle(file.mal_id, file.anilist_id);
-          await sleep(120);
-        }
-
-        // 2️⃣ TMDB Movie
-        if (!title && file.tmdb_id) {
-          title = await getTMDBMovie(file.tmdb_id);
-          await sleep(120);
-          if (!title) title = await getTMDBSeries(file.tmdb_id);
-        }
-
-        // 3️⃣ TMDB Series
-        if (!title && file.tmdbs_id) {
-          title = await getTMDBSeries(file.tmdbs_id);
-          await sleep(120);
-          if (!title) title = await getTMDBMovie(file.tmdbs_id);
-        }
-
-        // 4️⃣ TMDB Search fallback
-        if (!title && (file.tmdb_id || file.tmdbs_id)) {
-          title = await searchTMDB(file.tmdb_id || file.tmdbs_id);
-        }
-
-        // 5️⃣ Final fallback
-        if (!title) {
-          title = "Unknown Anime";
-        }
-
-        cache.set(uniqueId, title);
-        render(title);
+      } catch (err) {
+        console.error("Failed to load JSON:", err);
       }
     }
 
