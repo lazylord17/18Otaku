@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Anime Explorer</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+<style>
+  body { background: #000; }
+  .glass {
+    backdrop-filter: blur(10px);
+    background: rgba(0,0,0,0.4);
+  }
+</style>
+</head>
+
+<body class="text-white p-6">
+
+<h1 class="text-3xl font-semibold mb-6 flex items-center gap-3">
+  <i class="fa-solid fa-film"></i> Anime Explorer
+</h1>
+
+<!-- SEARCH -->
+<div class="mb-6">
+  <div class="flex items-center bg-gray-900 px-4 py-3 rounded-xl border border-gray-800">
+    <i class="fa fa-search text-gray-400 mr-3"></i>
+    <input id="search" type="text" placeholder="Search anime..."
+      class="bg-transparent outline-none w-full text-white placeholder-gray-500">
+  </div>
+</div>
+
+<!-- GRID -->
+<div id="container" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"></div>
+
+<script>
+const JSON_URL = "https://raw.githubusercontent.com/lazylord17/streamtape-json/main/ha.json";
+const TMDB_KEY = "YOUR_REAL_TMDB_API_KEY";
+
+const container = document.getElementById("container");
+const searchInput = document.getElementById("search");
+
+const cache = new Map();
+let allAnime = [];
+
+// ---------------- AniList ----------------
+async function getAniList(idMal, idAni) {
+  try {
+    const query = `
+      query ($idMal: Int, $id: Int) {
+        Media(idMal: $idMal, id: $id, type: ANIME) {
+          title { romaji english }
+          coverImage { large }
+          status
+          episodes
+          startDate { year month day }
+        }
+      }`;
+
+    const res = await fetch("https://graphql.anilist.co", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        query,
+        variables: { idMal: idMal || null, id: idAni || null }
+      })
+    });
+
+    const json = await res.json();
+    return json.data?.Media || null;
+
+  } catch {
+    return null;
+  }
+}
+
+// ---------------- TMDB ----------------
+async function getTMDB(id) {
+  try {
+    let res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_KEY}`);
+    let data = await res.json();
+
+    if (data.name) {
+      return {
+        title: data.name,
+        poster: "https://image.tmdb.org/t/p/w500" + data.poster_path,
+        episodes: data.number_of_episodes,
+        date: data.first_air_date,
+        status: data.status
+      };
+    }
+
+    res = await fetch(`https://api.themoviedb.org/3/movie/${id}?api_key=${TMDB_KEY}`);
+    data = await res.json();
+
+    if (data.title) {
+      return {
+        title: data.title,
+        poster: "https://image.tmdb.org/t/p/w500" + data.poster_path,
+        episodes: 1,
+        date: data.release_date,
+        status: "FINISHED"
+      };
+    }
+
+    return null;
+
+  } catch {
+    return null;
+  }
+}
+
+// ---------------- LOAD ----------------
+async function load() {
+  const res = await fetch(JSON_URL);
+  const data = await res.json();
+
+  for (const file of data.files) {
+
+    const id = file.mal_id || file.anilist_id || file.tmdb_id || file.tmdbs_id;
+    if (!id) continue;
+
+    let anime = null;
+
+    // AniList first
+    if (file.mal_id || file.anilist_id) {
+      const a = await getAniList(file.mal_id, file.anilist_id);
+
+      if (a) {
+        anime = {
+          title: a.title.english || a.title.romaji,
+          poster: a.coverImage?.large,
+          status: a.status,
+          totalEpisodes: a.episodes || "?",
+          date: `${a.startDate.year || ""}`,
+          currentEpisodes: file.episodes?.length || 0
+        };
+      }
+    }
+
+    // TMDB fallback
+    if (!anime && (file.tmdb_id || file.tmdbs_id)) {
+      const t = await getTMDB(file.tmdb_id || file.tmdbs_id);
+
+      if (t) {
+        anime = {
+          title: t.title,
+          poster: t.poster,
+          status: t.status,
+          totalEpisodes: t.episodes,
+          date: t.date,
+          currentEpisodes: file.episodes?.length || 0
+        };
+      }
+    }
+
+    if (!anime) continue;
+
+    allAnime.push(anime);
+  }
+
+  render(allAnime);
+}
+
+// ---------------- RENDER ----------------
+function render(list) {
+  container.innerHTML = "";
+
+  list.forEach(a => {
+    const div = document.createElement("div");
+    div.className = "relative rounded-xl overflow-hidden bg-gray-900 hover:scale-105 transition duration-300";
+
+    div.innerHTML = `
+      <img src="${a.poster}" class="w-full h-72 object-cover"/>
+
+      <!-- STATUS -->
+      <div class="absolute top-2 right-2 text-xs px-2 py-1 rounded bg-black/70">
+        ${a.status}
+      </div>
+
+      <!-- GLASS TITLE -->
+      <div class="absolute bottom-0 w-full p-3 glass">
+        <div class="font-semibold text-sm line-clamp-2">${a.title}</div>
+
+        <div class="text-xs text-gray-300 mt-1 flex items-center gap-2">
+          <i class="fa fa-calendar"></i> ${a.date || "?"}
+        </div>
+
+        <div class="text-xs text-gray-300 flex items-center gap-2">
+          <i class="fa fa-layer-group"></i>
+          ${a.currentEpisodes}/${a.totalEpisodes} eps
+        </div>
+      </div>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+// ---------------- SEARCH ----------------
+searchInput.addEventListener("input", () => {
+  const q = searchInput.value.toLowerCase();
+
+  const filtered = allAnime.filter(a =>
+    a.title.toLowerCase().includes(q)
+  );
+
+  render(filtered);
+});
+
+load();
+</script>
+
+</body>
+</html>
