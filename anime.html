@@ -10,8 +10,20 @@
 
 <style>
 body { background:#000; color:#fff; }
-a { color:#fff; text-decoration:none !important; }
-.star { color:#ff4444; }
+
+/* Clamp */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.line-clamp-5 {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 </style>
 </head>
 
@@ -26,20 +38,22 @@ a { color:#fff; text-decoration:none !important; }
 
 <!-- PLAYER -->
 <section>
-<h2 class="text-xl font-bold mb-4"><i class="fa fa-play-circle text-red-500"></i> Watch</h2>
+<h2 class="text-xl font-bold mb-4">
+<i class="fa fa-play-circle text-red-500"></i> Watch
+</h2>
 
 <div id="player" class="w-full aspect-video bg-black rounded-xl flex items-center justify-center text-gray-400">
 Select Episode
 </div>
-
 </section>
 
 <!-- EPISODES -->
 <section id="episodes">
-<h2 class="text-xl font-bold mb-4"><i class="fa fa-tv text-red-500"></i> Episodes</h2>
+<h2 class="text-xl font-bold mb-4">
+<i class="fa fa-tv text-red-500"></i> Episodes
+</h2>
 
 <div id="episode-list" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-2"></div>
-
 </section>
 
 </main>
@@ -57,29 +71,74 @@ const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main
 const TMDB_KEY = "e3afd4c89e3351edad9e875ff7a01f0c";
 const IMG = "https://image.tmdb.org/t/p/w500";
 
-// HEADER
-fetch("header.html")
-.then(r=>r.text())
-.then(h=>header.innerHTML = h);
-
-// LOAD JSON
 let FILES = [];
 
+/* ---------------- HEADER + FIX ---------------- */
+(async function () {
+  try {
+    const h = await fetch("header.html").then(r => r.text());
+    document.getElementById("header").innerHTML = h;
+  } catch {}
+
+  function applyPadding() {
+    const header = document.querySelector(".neek-header");
+    if (!header) return;
+
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      const height = header.getBoundingClientRect().height || 64;
+      document.body.style.paddingTop = height + "px";
+    } else {
+      document.body.style.paddingTop = "";
+    }
+  }
+
+  applyPadding();
+  window.addEventListener("resize", applyPadding);
+})();
+
+/* ---------------- JSON ---------------- */
 async function loadJSON(){
   const res = await fetch(JSON_URL);
   const j = await res.json();
   FILES = j.files;
 }
 
-// PLAYER
+/* ---------------- PLAYER ---------------- */
 function loadPlayer(url){
   document.getElementById("player").innerHTML =
-    `<iframe src="${url}" class="w-full h-full" allowfullscreen></iframe>`;
+    `<iframe src="${url}" class="w-full h-full rounded-xl" allowfullscreen></iframe>`;
 }
 
-// --------------------
-// ANILIST
-// --------------------
+/* ---------------- INFO UI ---------------- */
+function renderInfo(d){
+  document.getElementById("info").innerHTML = `
+  
+  <div class="w-full md:w-56 flex-shrink-0">
+    <img src="${d.img}" 
+         class="w-full h-[340px] object-cover rounded-xl"/>
+  </div>
+
+  <div class="flex-1 min-w-0">
+
+    <h1 class="text-2xl md:text-3xl font-bold mb-2 line-clamp-2">
+      ${d.title}
+    </h1>
+
+    <p class="text-gray-400 text-sm mb-3">
+      ${d.year || "—"} 
+      <span class="mx-2">|</span>
+      ⭐ ${d.rating || "N/A"}
+    </p>
+
+    <p class="text-gray-300 text-sm leading-relaxed line-clamp-5">
+      ${d.desc}
+    </p>
+
+  </div>
+  `;
+}
+
+/* ---------------- ANILIST ---------------- */
 async function loadAniList(){
 
   const query = mal
@@ -114,65 +173,44 @@ async function loadAniList(){
     title: data.title.english || data.title.romaji,
     img: data.coverImage.large,
     year: data.startDate.year,
-    rating: (data.averageScore/10).toFixed(1),
+    rating: data.averageScore ? (data.averageScore/10).toFixed(1) : "N/A",
     desc: data.description || "No description"
   });
 
   loadEpisodes(mal || ani);
 }
 
-// --------------------
-// TMDB MOVIE
-// --------------------
+/* ---------------- TMDB MOVIE ---------------- */
 async function loadMovie(){
   const r = await fetch(`https://api.themoviedb.org/3/movie/${tmdb}?api_key=${TMDB_KEY}`);
   const d = await r.json();
 
   renderInfo({
     title: d.title,
-    img: IMG+d.poster_path,
+    img: d.poster_path ? IMG+d.poster_path : "",
     year: d.release_date?.split("-")[0],
-    rating: d.vote_average.toFixed(1),
+    rating: d.vote_average?.toFixed(1),
     desc: d.overview
   });
 
   loadPlayer(`https://embedmaster.link/movie/${tmdb}`);
 }
 
-// --------------------
-// TMDB SERIES
-// --------------------
+/* ---------------- TMDB SERIES ---------------- */
 async function loadSeries(){
   const r = await fetch(`https://api.themoviedb.org/3/tv/${tmdbs}?api_key=${TMDB_KEY}`);
   const d = await r.json();
 
   renderInfo({
     title: d.name,
-    img: IMG+d.poster_path,
+    img: d.poster_path ? IMG+d.poster_path : "",
     year: d.first_air_date?.split("-")[0],
-    rating: d.vote_average.toFixed(1),
+    rating: d.vote_average?.toFixed(1),
     desc: d.overview
   });
 }
 
-// --------------------
-// RENDER INFO
-// --------------------
-function renderInfo(d){
-  document.getElementById("info").innerHTML = `
-  <img src="${d.img}" class="w-48 rounded-xl"/>
-  <div>
-    <h1 class="text-2xl font-bold mb-2">${d.title}</h1>
-    <p class="text-gray-400 mb-2">
-      ${d.year} | ⭐ ${d.rating}
-    </p>
-    <p class="text-gray-300">${d.desc}</p>
-  </div>`;
-}
-
-// --------------------
-// EPISODES FROM JSON
-// --------------------
+/* ---------------- EPISODES ---------------- */
 function loadEpisodes(id){
 
   const eps = FILES.filter(f =>
@@ -183,15 +221,14 @@ function loadEpisodes(id){
   const container = document.getElementById("episode-list");
 
   container.innerHTML = eps.map((ep,i)=>`
-    <button class="bg-gray-800 p-2 rounded hover:bg-red-500"
+    <button class="bg-gray-800 p-2 rounded hover:bg-red-500 text-sm"
       onclick="loadPlayer('https://streamtape.com/e/${ep.vidcode}')">
       EP ${i+1}
     </button>
   `).join("");
-
 }
 
-// INIT
+/* ---------------- INIT ---------------- */
 (async function(){
   await loadJSON();
 
