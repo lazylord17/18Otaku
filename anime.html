@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Anime — Watch</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+body { background:#000; color:#fff; }
+a { color:#fff; text-decoration:none !important; }
+.star { color:#ff4444; }
+</style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+<div id="header"></div>
+
+<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-10">
+
+<!-- INFO -->
+<section id="info" class="flex flex-col md:flex-row gap-6"></section>
+
+<!-- PLAYER -->
+<section>
+<h2 class="text-xl font-bold mb-4"><i class="fa fa-play-circle text-red-500"></i> Watch</h2>
+
+<div id="player" class="w-full aspect-video bg-black rounded-xl flex items-center justify-center text-gray-400">
+Select Episode
+</div>
+
+</section>
+
+<!-- EPISODES -->
+<section id="episodes">
+<h2 class="text-xl font-bold mb-4"><i class="fa fa-tv text-red-500"></i> Episodes</h2>
+
+<div id="episode-list" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-2"></div>
+
+</section>
+
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+
+const mal = params.get("malid");
+const ani = params.get("anilisid");
+const tmdb = params.get("tmdbid");
+const tmdbs = params.get("tmdbsid");
+
+const API = "https://graphql.anilist.co";
+const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
+const TMDB_KEY = "e3afd4c89e3351edad9e875ff7a01f0c";
+const IMG = "https://image.tmdb.org/t/p/w500";
+
+// HEADER
+fetch("header.html")
+.then(r=>r.text())
+.then(h=>header.innerHTML = h);
+
+// LOAD JSON
+let FILES = [];
+
+async function loadJSON(){
+  const res = await fetch(JSON_URL);
+  const j = await res.json();
+  FILES = j.files;
+}
+
+// PLAYER
+function loadPlayer(url){
+  document.getElementById("player").innerHTML =
+    `<iframe src="${url}" class="w-full h-full" allowfullscreen></iframe>`;
+}
+
+// --------------------
+// ANILIST
+// --------------------
+async function loadAniList(){
+
+  const query = mal
+    ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){
+        title{romaji english}
+        coverImage{large}
+        averageScore
+        episodes
+        startDate{year}
+        description
+      }}`
+    : `query($id:Int){Media(id:$id,type:ANIME){
+        title{romaji english}
+        coverImage{large}
+        averageScore
+        episodes
+        startDate{year}
+        description
+      }}`;
+
+  const vars = mal ? {idMal:+mal} : {id:+ani};
+
+  const res = await fetch(API,{
+    method:"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({query,variables:vars})
+  });
+
+  const data = (await res.json()).data.Media;
+
+  renderInfo({
+    title: data.title.english || data.title.romaji,
+    img: data.coverImage.large,
+    year: data.startDate.year,
+    rating: (data.averageScore/10).toFixed(1),
+    desc: data.description || "No description"
+  });
+
+  loadEpisodes(mal || ani);
+}
+
+// --------------------
+// TMDB MOVIE
+// --------------------
+async function loadMovie(){
+  const r = await fetch(`https://api.themoviedb.org/3/movie/${tmdb}?api_key=${TMDB_KEY}`);
+  const d = await r.json();
+
+  renderInfo({
+    title: d.title,
+    img: IMG+d.poster_path,
+    year: d.release_date?.split("-")[0],
+    rating: d.vote_average.toFixed(1),
+    desc: d.overview
+  });
+
+  loadPlayer(`https://embedmaster.link/movie/${tmdb}`);
+}
+
+// --------------------
+// TMDB SERIES
+// --------------------
+async function loadSeries(){
+  const r = await fetch(`https://api.themoviedb.org/3/tv/${tmdbs}?api_key=${TMDB_KEY}`);
+  const d = await r.json();
+
+  renderInfo({
+    title: d.name,
+    img: IMG+d.poster_path,
+    year: d.first_air_date?.split("-")[0],
+    rating: d.vote_average.toFixed(1),
+    desc: d.overview
+  });
+}
+
+// --------------------
+// RENDER INFO
+// --------------------
+function renderInfo(d){
+  document.getElementById("info").innerHTML = `
+  <img src="${d.img}" class="w-48 rounded-xl"/>
+  <div>
+    <h1 class="text-2xl font-bold mb-2">${d.title}</h1>
+    <p class="text-gray-400 mb-2">
+      ${d.year} | ⭐ ${d.rating}
+    </p>
+    <p class="text-gray-300">${d.desc}</p>
+  </div>`;
+}
+
+// --------------------
+// EPISODES FROM JSON
+// --------------------
+function loadEpisodes(id){
+
+  const eps = FILES.filter(f =>
+    String(f.mal_id) === String(id) ||
+    String(f.anilist_id) === String(id)
+  );
+
+  const container = document.getElementById("episode-list");
+
+  container.innerHTML = eps.map((ep,i)=>`
+    <button class="bg-gray-800 p-2 rounded hover:bg-red-500"
+      onclick="loadPlayer('https://streamtape.com/e/${ep.vidcode}')">
+      EP ${i+1}
+    </button>
+  `).join("");
+
+}
+
+// INIT
+(async function(){
+  await loadJSON();
+
+  if(mal || ani) loadAniList();
+  else if(tmdb) loadMovie();
+  else if(tmdbs) loadSeries();
+})();
+</script>
+
+</body>
+</html>
