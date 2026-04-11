@@ -11,7 +11,6 @@
 <style>
 body { background:#000; color:#fff; }
 
-/* Clamp */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -33,10 +32,8 @@ body { background:#000; color:#fff; }
 
 <main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-10">
 
-<!-- INFO -->
 <section id="info" class="flex flex-col md:flex-row gap-6"></section>
 
-<!-- PLAYER -->
 <section>
 <h2 class="text-xl font-bold mb-4">
 <i class="fa fa-play-circle text-red-500"></i> Watch
@@ -47,7 +44,6 @@ Select Episode
 </div>
 </section>
 
-<!-- EPISODES -->
 <section id="episodes">
 <h2 class="text-xl font-bold mb-4">
 <i class="fa fa-tv text-red-500"></i> Episodes
@@ -73,7 +69,7 @@ const IMG = "https://image.tmdb.org/t/p/w500";
 
 let FILES = [];
 
-/* ---------------- HEADER + FIX ---------------- */
+/* ---------- HEADER FIX ---------- */
 (async function () {
   try {
     const h = await fetch("header.html").then(r => r.text());
@@ -85,8 +81,7 @@ let FILES = [];
     if (!header) return;
 
     if (window.matchMedia("(min-width: 768px)").matches) {
-      const height = header.getBoundingClientRect().height || 64;
-      document.body.style.paddingTop = height + "px";
+      document.body.style.paddingTop = header.offsetHeight + "px";
     } else {
       document.body.style.paddingTop = "";
     }
@@ -96,26 +91,25 @@ let FILES = [];
   window.addEventListener("resize", applyPadding);
 })();
 
-/* ---------------- JSON ---------------- */
+/* ---------- LOAD JSON ---------- */
 async function loadJSON(){
   const res = await fetch(JSON_URL);
   const j = await res.json();
   FILES = j.files;
 }
 
-/* ---------------- PLAYER ---------------- */
+/* ---------- PLAYER ---------- */
 function loadPlayer(url){
   document.getElementById("player").innerHTML =
     `<iframe src="${url}" class="w-full h-full rounded-xl" allowfullscreen></iframe>`;
 }
 
-/* ---------------- INFO UI ---------------- */
+/* ---------- INFO ---------- */
 function renderInfo(d){
   document.getElementById("info").innerHTML = `
   
   <div class="w-full md:w-56 flex-shrink-0">
-    <img src="${d.img}" 
-         class="w-full h-[340px] object-cover rounded-xl"/>
+    <img src="${d.img}" class="w-full h-[340px] object-cover rounded-xl"/>
   </div>
 
   <div class="flex-1 min-w-0">
@@ -134,11 +128,37 @@ function renderInfo(d){
       ${d.desc}
     </p>
 
-  </div>
-  `;
+  </div>`;
 }
 
-/* ---------------- ANILIST ---------------- */
+/* ---------- EPISODES (COMMON) ---------- */
+function loadEpisodes(id, type){
+
+  const eps = FILES.filter(f =>
+    (type === "mal" && String(f.mal_id) === String(id)) ||
+    (type === "ani" && String(f.anilist_id) === String(id)) ||
+    (type === "tmdb" && String(f.tmdb_id) === String(id)) ||
+    (type === "tmdbs" && String(f.tmdbs_id) === String(id))
+  );
+
+  const container = document.getElementById("episode-list");
+
+  if (!eps.length) {
+    container.innerHTML = `<p class="text-gray-400 col-span-full text-center">
+      No episodes available
+    </p>`;
+    return;
+  }
+
+  container.innerHTML = eps.map((ep,i)=>`
+    <button class="bg-gray-800 p-2 rounded hover:bg-red-500 text-sm"
+      onclick="loadPlayer('https://streamtape.com/e/${ep.vidcode}')">
+      EP ${i+1}
+    </button>
+  `).join("");
+}
+
+/* ---------- ANILIST ---------- */
 async function loadAniList(){
 
   const query = mal
@@ -146,7 +166,6 @@ async function loadAniList(){
         title{romaji english}
         coverImage{large}
         averageScore
-        episodes
         startDate{year}
         description
       }}`
@@ -154,7 +173,6 @@ async function loadAniList(){
         title{romaji english}
         coverImage{large}
         averageScore
-        episodes
         startDate{year}
         description
       }}`;
@@ -177,10 +195,10 @@ async function loadAniList(){
     desc: data.description || "No description"
   });
 
-  loadEpisodes(mal || ani);
+  loadEpisodes(mal || ani, mal ? "mal" : "ani");
 }
 
-/* ---------------- TMDB MOVIE ---------------- */
+/* ---------- TMDB MOVIE ---------- */
 async function loadMovie(){
   const r = await fetch(`https://api.themoviedb.org/3/movie/${tmdb}?api_key=${TMDB_KEY}`);
   const d = await r.json();
@@ -193,10 +211,10 @@ async function loadMovie(){
     desc: d.overview
   });
 
-  loadPlayer(`https://embedmaster.link/movie/${tmdb}`);
+  loadEpisodes(tmdb, "tmdb");
 }
 
-/* ---------------- TMDB SERIES ---------------- */
+/* ---------- TMDB SERIES ---------- */
 async function loadSeries(){
   const r = await fetch(`https://api.themoviedb.org/3/tv/${tmdbs}?api_key=${TMDB_KEY}`);
   const d = await r.json();
@@ -208,27 +226,11 @@ async function loadSeries(){
     rating: d.vote_average?.toFixed(1),
     desc: d.overview
   });
+
+  loadEpisodes(tmdbs, "tmdbs");
 }
 
-/* ---------------- EPISODES ---------------- */
-function loadEpisodes(id){
-
-  const eps = FILES.filter(f =>
-    String(f.mal_id) === String(id) ||
-    String(f.anilist_id) === String(id)
-  );
-
-  const container = document.getElementById("episode-list");
-
-  container.innerHTML = eps.map((ep,i)=>`
-    <button class="bg-gray-800 p-2 rounded hover:bg-red-500 text-sm"
-      onclick="loadPlayer('https://streamtape.com/e/${ep.vidcode}')">
-      EP ${i+1}
-    </button>
-  `).join("");
-}
-
-/* ---------------- INIT ---------------- */
+/* ---------- INIT ---------- */
 (async function(){
   await loadJSON();
 
