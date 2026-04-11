@@ -6,25 +6,12 @@
 <title>Anime Library</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
 <style>
 body { background:#000; color:#fff; }
 .card { background:#111; }
 
-.line-clamp-2 {
-  display:-webkit-box;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
-  overflow:hidden;
-}
-
-/* HEADER FIX */
-body.with-header {
-  padding-top:80px;
-}
-
-/* MOBILE NAV FIX */
+/* fixes */
 @media(max-width:768px){
   body{ padding-bottom:80px; }
 }
@@ -37,11 +24,9 @@ body.with-header {
 
 <main class="flex-1 max-w-6xl mx-auto px-4 py-6 space-y-6">
 
-<!-- SEARCH -->
-<input id="search" type="text" placeholder="Search anime..."
-class="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white">
+<input id="search" placeholder="Search anime..."
+class="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3">
 
-<!-- SORT -->
 <select id="sort"
 class="bg-[#111] border border-gray-700 rounded-xl px-4 py-2">
   <option value="date">Release Date</option>
@@ -50,10 +35,7 @@ class="bg-[#111] border border-gray-700 rounded-xl px-4 py-2">
   <option value="title">Title A-Z</option>
 </select>
 
-<!-- GRID -->
 <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
-
-<!-- PAGINATION -->
 <div id="pagination" class="flex justify-center gap-2 mt-6"></div>
 
 </main>
@@ -70,20 +52,18 @@ const grid = document.getElementById("grid");
 const searchInput = document.getElementById("search");
 const sortSelect = document.getElementById("sort");
 
-/* HEADER */
-(async function(){
-  try{
-    const h = await fetch("header.html").then(r=>r.text());
+/* HEADER FIX */
+fetch("header.html")
+  .then(r=>r.text())
+  .then(h=>{
     document.getElementById("header").innerHTML = h;
-
     setTimeout(()=>{
       const header = document.querySelector(".neek-header");
       if(header){
-        document.body.style.paddingTop = header.offsetHeight + "px";
+        document.body.style.paddingTop = header.offsetHeight+"px";
       }
     },100);
-  }catch{}
-})();
+  });
 
 /* DATE */
 function extractDate(t){
@@ -91,65 +71,53 @@ function extractDate(t){
   return m ? new Date(m[1]) : null;
 }
 
-/* LOAD DATA */
+/* LOAD */
 (async function(){
 
-  try{
-    const json = await fetch(JSON_URL).then(r=>r.json());
+  const json = await fetch(JSON_URL).then(r=>r.json());
 
-    const map = {};
+  const map = {};
 
-    json.files.forEach(f=>{
-      const key = f.mal_id || f.anilist_id;
-      if(!key) return;
+  json.files.forEach(f=>{
+    const key = f.mal_id || f.anilist_id;
+    if(!key) return;
 
-      if(!map[key]){
-        map[key] = {...f, count:1, latestDate:extractDate(f.title)};
-      }else{
-        map[key].count++;
-      }
-    });
-
-    const list = Object.values(map);
-
-    const results = await Promise.all(list.map(async a=>{
-      try{
-        const query = a.mal_id
-          ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
-          : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
-
-        const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
-
-        const r = await fetch(API,{
-          method:"POST",
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({query,variables:vars})
-        });
-
-        const d = (await r.json()).data?.Media;
-
-        if(!d) return null;
-
-        return {raw:a,api:d};
-
-      }catch{
-        return null;
-      }
-    }));
-
-    DATA = results.filter(x=>x);
-
-    if(!DATA.length){
-      grid.innerHTML = `<p class="text-gray-400 col-span-full text-center">No anime found</p>`;
-      return;
+    if(!map[key]){
+      map[key] = {...f, count:1, latestDate:extractDate(f.title)};
+    } else {
+      map[key].count++;
     }
+  });
 
-    render();
+  const list = Object.values(map);
 
-  }catch(err){
-    grid.innerHTML = `<p class="text-red-400 text-center col-span-full">Failed to load data</p>`;
-    console.error(err);
-  }
+  // 🔥 IMPORTANT: no filtering out
+  const results = await Promise.all(list.map(async a=>{
+    let api = null;
+
+    try{
+      const query = a.mal_id
+        ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
+        : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
+
+      const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+
+      const r = await fetch(API,{
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query,variables:vars})
+      });
+
+      api = (await r.json()).data?.Media;
+
+    } catch {}
+
+    return {raw:a,api};
+  }));
+
+  DATA = results; // 🔥 keep everything
+
+  render();
 
 })();
 
@@ -160,18 +128,23 @@ function link(a){
 }
 
 /* CARD */
-function card(api,raw){
-  const title = api.title.english || api.title.romaji;
-  const img = api.coverImage?.large || "https://via.placeholder.com/300x450";
-  const rating = api.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
+function card(x){
+
+  const api = x.api;
+  const raw = x.raw;
+
+  const title = api?.title?.english || api?.title?.romaji || "Unknown Anime";
+  const img = api?.coverImage?.large || "https://via.placeholder.com/300x450?text=No+Image";
+  const rating = api?.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
+  const year = api?.startDate?.year || "—";
 
   return `
-  <a href="${link(raw)}" class="card rounded-xl overflow-hidden hover:scale-105 transition">
+  <a href="${link(raw)}" class="card rounded-xl overflow-hidden">
     <img src="${img}" class="w-full h-72 object-cover">
     <div class="p-2">
-      <p class="text-sm line-clamp-2">${title}</p>
+      <p class="text-sm">${title}</p>
       <p class="text-xs text-gray-400">
-        ${api.startDate.year || "—"} | ${raw.count}/${api.episodes||'?'} eps | ⭐ ${rating}
+        ${year} | ${raw.count}/? eps | ⭐ ${rating}
       </p>
     </div>
   </a>`;
@@ -186,31 +159,27 @@ function getFiltered(){
 
   if(q){
     arr = arr.filter(x=>{
-      const t = (x.api.title.english || x.api.title.romaji || "").toLowerCase();
+      const t = (x.api?.title?.english || x.api?.title?.romaji || "").toLowerCase();
       return t.includes(q);
     });
   }
 
   switch(sortSelect.value){
-
     case "pop":
-      arr.sort((a,b)=>(b.api.popularity||0)-(a.api.popularity||0));
+      arr.sort((a,b)=>(b.api?.popularity||0)-(a.api?.popularity||0));
       break;
-
     case "rating":
-      arr.sort((a,b)=>(b.api.averageScore||0)-(a.api.averageScore||0));
+      arr.sort((a,b)=>(b.api?.averageScore||0)-(a.api?.averageScore||0));
       break;
-
     case "title":
       arr.sort((a,b)=>{
-        const ta = (a.api.title.english||a.api.title.romaji||"");
-        const tb = (b.api.title.english||b.api.title.romaji||"");
+        const ta = (a.api?.title?.english||a.api?.title?.romaji||"");
+        const tb = (b.api?.title?.english||b.api?.title?.romaji||"");
         return ta.localeCompare(tb);
       });
       break;
-
     default:
-      arr.sort((a,b)=>(b.api.startDate.year||0)-(a.api.startDate.year||0));
+      arr.sort((a,b)=>(b.api?.startDate?.year||0)-(a.api?.startDate?.year||0));
   }
 
   return arr;
@@ -224,7 +193,7 @@ function render(){
   const start = (PAGE-1)*PER_PAGE;
   const paginated = arr.slice(start, start+PER_PAGE);
 
-  grid.innerHTML = paginated.map(x=>card(x.api,x.raw)).join("");
+  grid.innerHTML = paginated.map(card).join("");
 
   renderPagination(arr.length);
 }
@@ -233,30 +202,26 @@ function render(){
 function renderPagination(total){
 
   const pages = Math.ceil(total/PER_PAGE);
-  const el = document.getElementById("pagination");
 
   let html = "";
 
   for(let i=1;i<=pages;i++){
-    html += `
-    <button onclick="gotoPage(${i})"
-      class="px-3 py-1 rounded ${i===PAGE?'bg-red-500':'bg-gray-800'}">
-      ${i}
-    </button>`;
+    html += `<button onclick="gotoPage(${i})"
+    class="px-3 py-1 ${i===PAGE?'bg-red-500':'bg-gray-800'}">${i}</button>`;
   }
 
-  el.innerHTML = html;
+  document.getElementById("pagination").innerHTML = html;
 }
 
 function gotoPage(p){
   PAGE = p;
   render();
-  window.scrollTo({top:0,behavior:"smooth"});
+  window.scrollTo({top:0});
 }
 
 /* EVENTS */
-searchInput.addEventListener("input",()=>{ PAGE=1; render(); });
-sortSelect.addEventListener("change",()=>{ PAGE=1; render(); });
+searchInput.addEventListener("input",()=>{PAGE=1;render();});
+sortSelect.addEventListener("change",()=>{PAGE=1;render();});
 
 </script>
 
