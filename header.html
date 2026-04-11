@@ -1,169 +1,131 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>18Otaku</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            dark: '#222',
-            primary: '#ff4444',
-          },
-        },
-      },
-    };
-  </script>
-  <style>
-    .glass-nav {
-      background: rgba(10, 10, 10, 0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(20, 20, 20, 0.95);
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-      z-index: 1000;
-    }
-  </style>
-</head>
-<body class="bg-dark text-white">
+<header class="neek-header w-full bg-[#000] border-b border-gray-800 md:fixed md:top-0 md:left-0 md:right-0 z-50">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between min-h-[56px]">
 
-  <!-- Desktop Header -->
-  <header class="glass-nav fixed top-0 left-0 right-0 z-50 hidden md:block">
-    <div class="container mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="index.html" class="flex items-center">
-        <img 
-          src="YOUR-LOGO-LINK-HERE" 
-          alt="18Otaku Logo" 
-          class="h-9 w-auto"
-        >
-      </a>
-      <div class="flex-1 max-w-xl mx-4">
-        <form action="search.html" method="GET" class="relative">
-          <input
-            type="text"
-            name="query"
-            placeholder="Search anime, OVAs, series..."
-            class="w-full bg-dark text-white px-4 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-primary text-sm placeholder-gray-400"
-          >
-          <button type="submit" class="absolute right-3 top-2 text-gray-400 hover:text-primary">
-            <i class="fas fa-search fa-sm"></i>
-          </button>
-        </form>
-      </div>
-      <nav class="flex space-x-6">
-        <a href="javascript:void(0)" onclick="getRandomMedia()" class="text-gray-300 hover:text-primary text-sm font-medium">
-          Random
-        </a>
-        <a href="search.html?query=" class="text-gray-300 hover:text-primary text-sm font-medium">Browse</a>
-        <a href="seasons.html" class="text-gray-300 hover:text-primary text-sm font-medium">Seasons</a>
-        <a href="genres.html" class="text-gray-300 hover:text-primary text-sm font-medium">Genres</a>
-      </nav>
-    </div>
-  </header>
-
-  <!-- Mobile Header -->
-  <div class="md:hidden glass-nav fixed top-0 left-0 right-0 z-40 pt-3 pb-3 px-4">
-    <a href="index.html" class="flex justify-center mb-3">
-      <img 
-        src="YOUR-LOGO-LINK-HERE" 
-        alt="18Otaku Logo" 
-        class="h-7 w-auto opacity-90"
-      >
+    <!-- Logo -->
+    <a href="/index.html" class="flex items-center gap-3" aria-label="Home">
+      <img src="https://github.com/18otaku/18Otaku/blob/main/assets/images/18otaku.png?raw=true"
+           alt="18Otaku logo" class="h-10 object-contain max-h-11" />
     </a>
-    <form action="search.html" method="GET" class="relative">
-      <input
-        type="text"
-        name="query"
-        placeholder="Search anime..."
-        class="w-full bg-dark text-white px-4 py-2 rounded-full focus:outline-none focus:ring-1 focus:ring-primary text-base placeholder-gray-400"
-      >
-      <button type="submit" class="absolute right-3 top-2 text-gray-400 hover:text-primary">
-        <i class="fas fa-search fa-xs"></i>
-      </button>
-    </form>
+
+    <!-- Desktop Navigation -->
+    <nav class="hidden md:flex gap-6 text-sm font-medium">
+      <a class="neek-link" href="/movies/index.html">Switch to Movies</a>
+      <a class="neek-link" href="/anime/index.html">Home</a>
+      <a class="neek-link" href="/anime/popular.html">Popular</a>
+      <a class="neek-link" href="/anime/latest.html">Latest</a>
+      <a class="neek-link" href="/anime/library.html">Library</a>
+    </nav>
+
+    <!-- Desktop Search -->
+    <div class="hidden md:flex">
+      <form action="/anime/search.html" method="get" class="relative w-72">
+        <input name="q" type="text" placeholder="Search anime..."
+               class="w-full rounded-xl bg-[#1a1a1a] border border-gray-700 px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#ff4444]" />
+        <button type="submit" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+      </form>
+    </div>
   </div>
 
-  <!-- Mobile Bottom Nav -->
-  <nav class="md:hidden bottom-nav flex justify-around items-center py-3">
-    <a href="index.html" class="text-gray-400 hover:text-primary flex flex-col items-center text-xs">
-      <i class="fas fa-home fa-sm mb-1"></i>
-      <span>Home</span>
+  <!-- Mobile Navigation -->
+  <nav class="neek-mobile-nav md:hidden fixed bottom-0 left-0 right-0 bg-black/70 backdrop-blur-lg border-t border-gray-800 flex justify-around text-xs py-2 z-50">
+
+    <a class="neek-link flex flex-col items-center" href="/movies/index.html">
+      <i class="fa-solid fa-exchange-alt"></i>
+      <span class="mt-1 text-[10px]">Movies</span>
     </a>
-    <a href="javascript:void(0)" onclick="getRandomMedia()" class="text-gray-400 hover:text-primary flex flex-col items-center text-xs">
-      <i class="fas fa-random fa-sm mb-1"></i>
-      <span>Random</span>
+
+    <a class="neek-link flex flex-col items-center" href="/anime/index.html">
+      <i class="fa-solid fa-home"></i>
+      <span class="mt-1 text-[10px]">Home</span>
     </a>
-    <a href="search.html?query=" class="text-gray-400 hover:text-primary flex flex-col items-center text-xs">
-      <i class="fas fa-search fa-sm mb-1"></i>
-      <span>Browse</span>
+
+    <a class="neek-link flex flex-col items-center" href="/anime/popular.html">
+      <i class="fa-solid fa-fire"></i>
+      <span class="mt-1 text-[10px]">Popular</span>
     </a>
-    <a href="seasons.html" class="text-gray-400 hover:text-primary flex flex-col items-center text-xs">
-      <i class="fas fa-calendar-alt fa-sm mb-1"></i>
-      <span>Seasons</span>
+
+    <a class="neek-link flex flex-col items-center" href="/anime/latest.html">
+      <i class="fa-solid fa-clock"></i>
+      <span class="mt-1 text-[10px]">Latest</span>
     </a>
-    <a href="genres.html" class="text-gray-400 hover:text-primary flex flex-col items-center text-xs">
-      <i class="fas fa-th fa-sm mb-1"></i>
-      <span>Genres</span>
+
+    <a class="neek-link flex flex-col items-center" href="/anime/library.html">
+      <i class="fa-solid fa-folder"></i>
+      <span class="mt-1 text-[10px]">Library</span>
     </a>
+
+    <!-- Search -->
+    <a class="neek-link flex flex-col items-center" href="#mobileSearchOverlay">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <span class="mt-1 text-[10px]">Search</span>
+    </a>
+
   </nav>
+</header>
 
-  <!-- Spacer -->
-  <div class="h-24 md:h-20"></div>
+<!-- Mobile Search Overlay -->
+<div id="mobileSearchOverlay" class="mobile-search-overlay">
+  <div class="mobile-search-panel">
 
-  <!-- Scripts -->
-  <script>
-    const TMDB_API_KEY = 'e3afd4c89e3351edad9e875ff7a01f0c';
+    <form action="/anime/search.html" method="get" class="w-full max-w-md mx-auto">
+      <div class="relative">
+        <input name="q" type="text" placeholder="Search anime..."
+               class="w-full rounded-xl bg-[#1a1a1a] border border-gray-700 px-4 py-3 text-lg text-white placeholder-gray-400 focus:outline-none focus:border-[#ff4444]" />
+        <button type="submit" class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 hover:text-white">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </button>
+      </div>
+    </form>
 
-    document.querySelectorAll('form').forEach(form => {
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const query = this.querySelector('input').value.trim();
-        if (query) {
-          window.location.href = `search.html?query=${encodeURIComponent(query)}`;
-        } else {
-          window.location.href = 'search.html?query=';
-        }
-      });
-    });
+    <div class="text-center mt-5">
+      <a href="#" class="text-sm text-gray-300 hover:text-white">
+        Close <i class="fa-solid fa-times ml-2"></i>
+      </a>
+    </div>
 
-    async function getRandomMedia() {
-      const mediaType = 'tv'; // Anime is usually under 'tv'
+  </div>
+</div>
 
-      try {
-        const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/popular?api_key=${TMDB_API_KEY}`);
-        const data = await res.json();
-        const totalPages = Math.min(data.total_pages, 500);
-        const randomPage = Math.floor(Math.random() * totalPages) + 1;
+<style>
+:root { --accent: #ff4444; }
 
-        const pageRes = await fetch(`https://api.themoviedb.org/3/${mediaType}/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`);
-        const pageData = await pageRes.json();
+html, body {
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
 
-        if (pageData.results?.length) {
-          const valid = pageData.results.filter(item => item.id && !item.adult);
-          if (valid.length) {
-            const randomItem = valid[Math.floor(Math.random() * valid.length)];
-            window.location.href = `info.html?id=${randomItem.id}&type=${mediaType}`;
-            return;
-          }
-        }
+/* Links */
+.neek-link {
+  color: #fff;
+  text-decoration: none !important;
+}
+.neek-link:hover {
+  color: var(--accent) !important;
+}
 
-        alert("Couldn't find a random anime. Try again.");
-      } catch (err) {
-        console.error("Error fetching random anime:", err);
-        alert("Failed to fetch random anime.");
-      }
-    }
-  </script>
-</body>
-</html>
+/* Mobile nav */
+.neek-mobile-nav a {
+  flex: 1;
+  text-align: center;
+  color: #fff;
+}
+
+/* Overlay */
+.mobile-search-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.95);
+  backdrop-filter: blur(8px);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.mobile-search-overlay:target {
+  display: flex;
+}
+</style>
