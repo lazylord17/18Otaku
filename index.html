@@ -141,7 +141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const year = api.startDate?.year || "—";
 
     return `
-    <a href="${blur?'/library.html':link(raw)}" class="card block relative rounded-xl overflow-hidden">
+    <a href="${blur?'library.html':link(raw)}" class="card block relative rounded-xl overflow-hidden">
       <img src="${img}" onerror="this.src='${FALLBACK}'"
         class="w-full h-72 object-cover ${blur?'blur-sm brightness-50':''}">
       ${blur?'<div class="absolute inset-0 flex items-center justify-center font-bold">VIEW ALL →</div>':''}
