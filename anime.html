@@ -69,12 +69,10 @@ const IMG = "https://image.tmdb.org/t/p/w500";
 
 let FILES = [];
 
-/* ---------- HEADER FIX ---------- */
+/* HEADER FIX */
 (async function () {
-  try {
-    const h = await fetch("header.html").then(r => r.text());
-    document.getElementById("header").innerHTML = h;
-  } catch {}
+  const h = await fetch("header.html").then(r => r.text());
+  document.getElementById("header").innerHTML = h;
 
   function applyPadding() {
     const header = document.querySelector(".neek-header");
@@ -91,25 +89,26 @@ let FILES = [];
   window.addEventListener("resize", applyPadding);
 })();
 
-/* ---------- LOAD JSON ---------- */
+/* JSON */
 async function loadJSON(){
   const res = await fetch(JSON_URL);
   const j = await res.json();
   FILES = j.files;
 }
 
-/* ---------- PLAYER ---------- */
+/* PLAYER */
 function loadPlayer(url){
   document.getElementById("player").innerHTML =
     `<iframe src="${url}" class="w-full h-full rounded-xl" allowfullscreen></iframe>`;
 }
 
-/* ---------- INFO ---------- */
+/* INFO */
 function renderInfo(d){
   document.getElementById("info").innerHTML = `
   
   <div class="w-full md:w-56 flex-shrink-0">
-    <img src="${d.img}" class="w-full h-[340px] object-cover rounded-xl"/>
+    <img src="${d.img}" 
+         class="w-full md:w-full h-auto md:h-[340px] object-cover rounded-xl"/>
   </div>
 
   <div class="flex-1 min-w-0">
@@ -131,7 +130,7 @@ function renderInfo(d){
   </div>`;
 }
 
-/* ---------- EPISODES (COMMON) ---------- */
+/* EPISODES */
 function loadEpisodes(id, type){
 
   const eps = FILES.filter(f =>
@@ -144,9 +143,7 @@ function loadEpisodes(id, type){
   const container = document.getElementById("episode-list");
 
   if (!eps.length) {
-    container.innerHTML = `<p class="text-gray-400 col-span-full text-center">
-      No episodes available
-    </p>`;
+    container.innerHTML = `<p class="text-gray-400 col-span-full text-center">No episodes available</p>`;
     return;
   }
 
@@ -158,24 +155,11 @@ function loadEpisodes(id, type){
   `).join("");
 }
 
-/* ---------- ANILIST ---------- */
+/* ANILIST */
 async function loadAniList(){
-
   const query = mal
-    ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){
-        title{romaji english}
-        coverImage{large}
-        averageScore
-        startDate{year}
-        description
-      }}`
-    : `query($id:Int){Media(id:$id,type:ANIME){
-        title{romaji english}
-        coverImage{large}
-        averageScore
-        startDate{year}
-        description
-      }}`;
+    ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore startDate{year}description}}`
+    : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore startDate{year}description}}`;
 
   const vars = mal ? {idMal:+mal} : {id:+ani};
 
@@ -198,7 +182,7 @@ async function loadAniList(){
   loadEpisodes(mal || ani, mal ? "mal" : "ani");
 }
 
-/* ---------- TMDB MOVIE ---------- */
+/* TMDB MOVIE */
 async function loadMovie(){
   const r = await fetch(`https://api.themoviedb.org/3/movie/${tmdb}?api_key=${TMDB_KEY}`);
   const d = await r.json();
@@ -214,7 +198,7 @@ async function loadMovie(){
   loadEpisodes(tmdb, "tmdb");
 }
 
-/* ---------- TMDB SERIES ---------- */
+/* TMDB SERIES */
 async function loadSeries(){
   const r = await fetch(`https://api.themoviedb.org/3/tv/${tmdbs}?api_key=${TMDB_KEY}`);
   const d = await r.json();
@@ -230,7 +214,7 @@ async function loadSeries(){
   loadEpisodes(tmdbs, "tmdbs");
 }
 
-/* ---------- INIT ---------- */
+/* INIT */
 (async function(){
   await loadJSON();
 
