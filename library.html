@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Anime Library</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+body { background:#000; color:#fff; }
+.card { background:#111; }
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Mobile nav fix */
+@media (max-width:768px){
+  body{ padding-bottom:80px; }
+}
+</style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+<div id="header"></div>
+
+<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-6">
+
+<!-- SEARCH -->
+<input id="search" type="text" placeholder="Search anime..."
+class="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-400">
+
+<!-- SORT -->
+<select id="sort"
+class="bg-[#111] border border-gray-700 rounded-xl px-4 py-2">
+  <option value="date">Release Date</option>
+  <option value="pop">Popularity</option>
+  <option value="rating">Rating</option>
+  <option value="title">Title A-Z</option>
+</select>
+
+<!-- GRID -->
+<div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+
+<!-- PAGINATION -->
+<div id="pagination" class="flex justify-center gap-2 mt-6"></div>
+
+</main>
+
+<script>
+const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
+const API = "https://graphql.anilist.co";
+
+const PER_PAGE = 20;
+let PAGE = 1;
+let DATA = [];
+
+const grid = document.getElementById("grid");
+const searchInput = document.getElementById("search");
+const sortSelect = document.getElementById("sort");
+
+/* HEADER */
+fetch("header.html")
+  .then(r=>r.text())
+  .then(h=>header.innerHTML = h);
+
+/* DATE */
+function extractDate(t){
+  const m = t.match(/\[(\w+ \d{1,2}, \d{4})\]/);
+  return m ? new Date(m[1]) : null;
+}
+
+/* LOAD */
+(async function(){
+
+  const json = await fetch(JSON_URL).then(r=>r.json());
+
+  const map = {};
+  json.files.forEach(f=>{
+    const key = f.mal_id || f.anilist_id;
+    if(!key) return;
+
+    if(!map[key]){
+      map[key] = {...f, count:1, latestDate:extractDate(f.title)};
+    }else{
+      map[key].count++;
+    }
+  });
+
+  const list = Object.values(map);
+
+  const results = await Promise.all(list.map(async a=>{
+    const query = a.mal_id
+      ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
+      : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
+
+    const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+
+    try{
+      const r = await fetch(API,{
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query,variables:vars})
+      });
+      const d = (await r.json()).data.Media;
+      return {raw:a,api:d};
+    }catch{return null;}
+  }));
+
+  DATA = results.filter(x=>x && x.api);
+
+  render();
+
+})();
+
+/* LINK */
+function link(a){
+  if(a.mal_id) return `anime.html?malid=${a.mal_id}`;
+  if(a.anilist_id) return `anime.html?anilisid=${a.anilist_id}`;
+}
+
+/* CARD */
+function card(api,raw){
+  const title = api.title.english || api.title.romaji;
+  const img = api.coverImage?.large;
+  const rating = api.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
+
+  return `
+  <a href="${link(raw)}" class="card rounded-xl overflow-hidden hover:scale-105 transition">
+    <img src="${img}" class="w-full h-72 object-cover">
+    <div class="p-2">
+      <p class="text-sm font-medium line-clamp-2">${title}</p>
+      <p class="text-xs text-gray-400">
+        ${api.startDate.year} | ${raw.count}/${api.episodes||'?'} eps | ⭐ ${rating}
+      </p>
+    </div>
+  </a>`;
+}
+
+/* FILTER + SORT */
+function getFiltered(){
+
+  let arr = [...DATA];
+
+  const q = searchInput.value.toLowerCase();
+
+  if(q){
+    arr = arr.filter(x=>{
+      const t = (x.api.title.english || x.api.title.romaji || "").toLowerCase();
+      return t.includes(q);
+    });
+  }
+
+  switch(sortSelect.value){
+    case "pop":
+      arr.sort((a,b)=>b.api.popularity - a.api.popularity);
+      break;
+    case "rating":
+      arr.sort((a,b)=>b.api.averageScore - a.api.averageScore);
+      break;
+    case "title":
+      arr.sort((a,b)=>{
+        const ta = (a.api.title.english||a.api.title.romaji);
+        const tb = (b.api.title.english||b.api.title.romaji);
+        return ta.localeCompare(tb);
+      });
+      break;
+    default:
+      arr.sort((a,b)=>b.api.startDate.year - a.api.startDate.year);
+  }
+
+  return arr;
+}
+
+/* RENDER */
+function render(){
+
+  const arr = getFiltered();
+
+  const start = (PAGE-1)*PER_PAGE;
+  const paginated = arr.slice(start, start+PER_PAGE);
+
+  grid.innerHTML = paginated.map(x=>card(x.api,x.raw)).join("");
+
+  renderPagination(arr.length);
+}
+
+/* PAGINATION */
+function renderPagination(total){
+
+  const pages = Math.ceil(total/PER_PAGE);
+  const el = document.getElementById("pagination");
+
+  let html = "";
+
+  for(let i=1;i<=pages;i++){
+    html += `
+    <button onclick="gotoPage(${i})"
+      class="px-3 py-1 rounded ${i===PAGE?'bg-red-500':'bg-gray-800'}">
+      ${i}
+    </button>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function gotoPage(p){
+  PAGE = p;
+  render();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* EVENTS */
+searchInput.addEventListener("input",()=>{
+  PAGE=1;
+  render();
+});
+
+sortSelect.addEventListener("change",()=>{
+  PAGE=1;
+  render();
+});
+
+</script>
+
+</body>
+</html>
