@@ -11,7 +11,6 @@
 body { background:#000; color:#fff; }
 .card { background:#111; }
 
-/* fixes */
 @media(max-width:768px){
   body{ padding-bottom:80px; }
 }
@@ -42,7 +41,8 @@ class="bg-[#111] border border-gray-700 rounded-xl px-4 py-2">
 
 <script>
 const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
-const API = "https://graphql.anilist.co";
+const ANILIST = "https://graphql.anilist.co";
+const TMDB_KEY = "e3afd4c89e3351edad9e875ff7a01f0c";
 
 const PER_PAGE = 20;
 let PAGE = 1;
@@ -52,7 +52,7 @@ const grid = document.getElementById("grid");
 const searchInput = document.getElementById("search");
 const sortSelect = document.getElementById("sort");
 
-/* HEADER FIX */
+/* HEADER */
 fetch("header.html")
   .then(r=>r.text())
   .then(h=>{
@@ -65,13 +65,7 @@ fetch("header.html")
     },100);
   });
 
-/* DATE */
-function extractDate(t){
-  const m = t.match(/\[(\w+ \d{1,2}, \d{4})\]/);
-  return m ? new Date(m[1]) : null;
-}
-
-/* LOAD */
+/* LOAD DATA */
 (async function(){
 
   const json = await fetch(JSON_URL).then(r=>r.json());
@@ -79,11 +73,11 @@ function extractDate(t){
   const map = {};
 
   json.files.forEach(f=>{
-    const key = f.mal_id || f.anilist_id;
+    const key = f.mal_id || f.anilist_id || f.tmdb_id || f.tmdbs_id;
     if(!key) return;
 
     if(!map[key]){
-      map[key] = {...f, count:1, latestDate:extractDate(f.title)};
+      map[key] = {...f, count:1};
     } else {
       map[key].count++;
     }
@@ -91,60 +85,107 @@ function extractDate(t){
 
   const list = Object.values(map);
 
-  // 🔥 IMPORTANT: no filtering out
   const results = await Promise.all(list.map(async a=>{
+
     let api = null;
+    let type = "";
 
     try{
-      const query = a.mal_id
-        ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
-        : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
+      // MAL / ANILIST
+      if(a.mal_id || a.anilist_id){
 
-      const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+        type = "anime";
 
-      const r = await fetch(API,{
-        method:"POST",
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({query,variables:vars})
-      });
+        const query = a.mal_id
+          ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
+          : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
 
-      api = (await r.json()).data?.Media;
+        const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
 
-    } catch {}
+        const r = await fetch(ANILIST,{
+          method:"POST",
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({query,variables:vars})
+        });
 
-    return {raw:a,api};
+        api = (await r.json()).data?.Media;
+      }
+
+      // TMDB MOVIE
+      else if(a.tmdb_id){
+
+        type = "movie";
+
+        const r = await fetch(`https://api.themoviedb.org/3/movie/${a.tmdb_id}?api_key=${TMDB_KEY}`);
+        const d = await r.json();
+
+        api = {
+          title:{english:d.title},
+          coverImage:{large:"https://image.tmdb.org/t/p/w500"+d.poster_path},
+          averageScore:d.vote_average*10,
+          popularity:d.popularity,
+          startDate:{year:(d.release_date||"").split("-")[0]}
+        };
+      }
+
+      // TMDB SERIES
+      else if(a.tmdbs_id){
+
+        type = "series";
+
+        const r = await fetch(`https://api.themoviedb.org/3/tv/${a.tmdbs_id}?api_key=${TMDB_KEY}`);
+        const d = await r.json();
+
+        api = {
+          title:{english:d.name},
+          coverImage:{large:"https://image.tmdb.org/t/p/w500"+d.poster_path},
+          averageScore:d.vote_average*10,
+          popularity:d.popularity,
+          startDate:{year:(d.first_air_date||"").split("-")[0]},
+          episodes:d.number_of_episodes
+        };
+      }
+
+    }catch{}
+
+    return {raw:a,api,type};
+
   }));
 
-  DATA = results; // 🔥 keep everything
+  DATA = results;
 
   render();
 
 })();
 
 /* LINK */
-function link(a){
+function link(x){
+  const a = x.raw;
+
   if(a.mal_id) return `anime.html?malid=${a.mal_id}`;
   if(a.anilist_id) return `anime.html?anilisid=${a.anilist_id}`;
+  if(a.tmdb_id) return `anime.html?tmdbid=${a.tmdb_id}`;
+  if(a.tmdbs_id) return `anime.html?tmdbsid=${a.tmdbs_id}`;
 }
 
 /* CARD */
 function card(x){
 
-  const api = x.api;
+  const api = x.api || {};
   const raw = x.raw;
 
-  const title = api?.title?.english || api?.title?.romaji || "Unknown Anime";
-  const img = api?.coverImage?.large || "https://via.placeholder.com/300x450?text=No+Image";
-  const rating = api?.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
-  const year = api?.startDate?.year || "—";
+  const title = api.title?.english || api.title?.romaji || "Unknown";
+  const img = api.coverImage?.large || "https://via.placeholder.com/300x450";
+  const rating = api.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
+  const year = api.startDate?.year || "—";
 
   return `
-  <a href="${link(raw)}" class="card rounded-xl overflow-hidden">
+  <a href="${link(x)}" class="card rounded-xl overflow-hidden hover:scale-105">
     <img src="${img}" class="w-full h-72 object-cover">
     <div class="p-2">
       <p class="text-sm">${title}</p>
       <p class="text-xs text-gray-400">
-        ${year} | ${raw.count}/? eps | ⭐ ${rating}
+        ${year} | ${raw.count}/${api.episodes||'?'} eps | ⭐ ${rating}
       </p>
     </div>
   </a>`;
@@ -173,8 +214,8 @@ function getFiltered(){
       break;
     case "title":
       arr.sort((a,b)=>{
-        const ta = (a.api?.title?.english||a.api?.title?.romaji||"");
-        const tb = (b.api?.title?.english||b.api?.title?.romaji||"");
+        const ta = (a.api?.title?.english||"");
+        const tb = (b.api?.title?.english||"");
         return ta.localeCompare(tb);
       });
       break;
