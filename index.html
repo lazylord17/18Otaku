@@ -1,188 +1,166 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>18Otaku | Home</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Neek — Anime</title>
+
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            dark: '#222',
-            primary: '#ff4444',
-          },
-        },
-      },
-    };
-  </script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
   <style>
-    a { color: inherit; text-decoration: none; }
-    .slider-container {
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-      cursor: grab;
+    :root {
+      --accent:#ff4444;
+      --bg:#0b0b0b;
+      --muted:#9b9b9b;
     }
-    .slider-container::-webkit-scrollbar {
-      display: none;
+
+    html,body {
+      background:var(--bg);
+      color:#fff;
     }
-    .slider-container:active {
-      cursor: grabbing;
-    }
-    .poster-box {
-      width: 224px;
-      height: 336px;
-    }
+
+    .card { background:#1a1a1a; }
+    .star { color:var(--accent); }
   </style>
 </head>
-<body class="bg-black text-white">
 
-  <!-- Header -->
-  <div id="header"></div>
+<body class="min-h-screen flex flex-col">
 
-  <!-- Hero Slider -->
-  <section class="relative h-[70vh] min-h-[500px] overflow-hidden" id="hero-slider-container">
-    <div id="hero-slider" class="h-full w-full relative"></div>
-    <div id="hero-dots" class="absolute bottom-8 left-0 right-0 flex justify-center gap-2"></div>
-  </section>
+<!-- Header -->
+<div id="header"></div>
 
-  <main class="container mx-auto px-4 py-8 space-y-12">
+<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-10">
 
-    <!-- Top Airing -->
-    <section>
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold"><i class="fas fa-bolt text-primary mr-2"></i> Top Airing</h2>
-        <a href="#" class="text-sm text-gray-400 hover:text-primary flex items-center">View All <i class="fas fa-chevron-right ml-1"></i></a>
-      </div>
-      <div id="top-airing" class="flex gap-4 overflow-x-auto slider-container pb-4 pt-[1.2em] px-[1em]"></div>
-    </section>
+  <h1 class="text-3xl font-bold flex items-center gap-2">
+    <i class="fa-solid fa-dragon text-[--accent]"></i> Anime Library
+  </h1>
 
-    <!-- Popular -->
-    <section>
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold"><i class="fas fa-star text-primary mr-2"></i> Popular</h2>
-        <a href="#" class="text-sm text-gray-400 hover:text-primary flex items-center">View All <i class="fas fa-chevron-right ml-1"></i></a>
-      </div>
-      <div id="popular-anime" class="flex gap-4 overflow-x-auto slider-container pb-4 pt-[1.2em] px-[1em]"></div>
-    </section>
+  <div id="anime-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
 
-    <!-- Upcoming -->
-    <section>
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold"><i class="fas fa-calendar text-primary mr-2"></i> Upcoming</h2>
-        <a href="#" class="text-sm text-gray-400 hover:text-primary flex items-center">View All <i class="fas fa-chevron-right ml-1"></i></a>
-      </div>
-      <div id="upcoming-anime" class="flex gap-4 overflow-x-auto slider-container pb-4 pt-[1.2em] px-[1em]"></div>
-    </section>
+</main>
 
-  </main>
+<!-- Footer -->
+<div id="footer"></div>
 
-  <script>
-    async function fetchAnime(endpoint, uniqueKeysSet) {
-      try {
-        const res = await fetch(`https://api.jikan.moe/v4/${endpoint}`);
-        const data = await res.json();
-        const seen = new Set();
-        return data.data.filter(anime => {
-          const key = anime.title + anime.year;
-          if (seen.has(key) || uniqueKeysSet.has(key)) return false;
-          seen.add(key);
-          uniqueKeysSet.add(key);
-          return true;
-        });
-      } catch (err) {
-        console.error(`Failed to fetch ${endpoint}:`, err);
-        return [];
-      }
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+
+  // Load header/footer
+  Promise.all([
+    fetch("header.html").then(r => r.text()),
+    fetch("footer.html").then(r => r.text())
+  ]).then(([h,f])=>{
+    document.getElementById("header").innerHTML = h;
+    document.getElementById("footer").innerHTML = f;
+  });
+
+  const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
+  const ANILIST_API = "https://graphql.anilist.co";
+
+  const grid = document.getElementById("anime-grid");
+
+  // Fetch your JSON
+  const res = await fetch(JSON_URL);
+  const data = await res.json();
+
+  // Get unique anime IDs
+  const unique = {};
+  data.files.forEach(file => {
+    const id = file.mal_id || file.anilist_id;
+    if (id && !unique[id]) {
+      unique[id] = file;
     }
+  });
 
-    function createCard(anime) {
-      return `
-        <div class="anime-card w-40 sm:w-48 md:w-56 transform transition duration-300">
-          <a href="info.html?id=${anime.mal_id}" class="block">
-            <div class="poster-box bg-dark rounded-lg overflow-hidden mb-2">
-              <img src="${anime.images.jpg.image_url}" alt="${anime.title}" class="w-full h-full object-cover"/>
-            </div>
-            <h3 class="font-medium truncate text-white">${anime.title}</h3>
-            <p class="text-xs text-gray-400">${anime.year || 'Unknown'}</p>
-          </a>
-        </div>
+  const animeList = Object.values(unique).slice(0, 20);
+
+  async function fetchAniList(anime) {
+    let query, variables;
+
+    if (anime.anilist_id) {
+      query = `
+        query ($id: Int) {
+          Media(id: $id, type: ANIME) {
+            id
+            title { romaji english }
+            coverImage { large }
+            averageScore
+            startDate { year }
+            episodes
+          }
+        }
       `;
+      variables = { id: anime.anilist_id };
+
+    } else {
+      // MAL -> AniList
+      query = `
+        query ($idMal: Int) {
+          Media(idMal: $idMal, type: ANIME) {
+            id
+            title { romaji english }
+            coverImage { large }
+            averageScore
+            startDate { year }
+            episodes
+          }
+        }
+      `;
+      variables = { idMal: parseInt(anime.mal_id) };
     }
 
-    async function initAnimeSections() {
-      const globalSeen = new Set();
-
-      const topAiring = await fetchAnime('top/anime?filter=airing', globalSeen);
-      document.getElementById('top-airing').innerHTML = topAiring.slice(0, 10).map(createCard).join('');
-
-      const popular = await fetchAnime('top/anime', globalSeen);
-      document.getElementById('popular-anime').innerHTML = popular.slice(0, 10).map(createCard).join('');
-
-      const upcoming = await fetchAnime('seasons/upcoming', globalSeen);
-      document.getElementById('upcoming-anime').innerHTML = upcoming.slice(0, 10).map(createCard).join('');
-    }
-
-    async function initHeroSlider() {
-      const res = await fetch('https://api.jikan.moe/v4/top/anime?filter=airing');
-      const data = await res.json();
-      const animeList = data.data;
-      const slider = document.getElementById('hero-slider');
-      const dots = document.getElementById('hero-dots');
-
-      slider.innerHTML = animeList.slice(0, 5).map((anime, i) => `
-        <div class="hero-slide absolute inset-0 w-full h-full ${i === 0 ? 'opacity-100' : 'opacity-0'} transition-opacity duration-1000" style="background-image: url(${anime.images.jpg.large_image_url}); background-size: cover; background-position: center;">
-          <div class="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent"></div>
-          <div class="absolute bottom-0 left-0 right-0 p-8 md:p-12 lg:p-16 max-w-4xl">
-            <h2 class="text-3xl md:text-5xl font-bold mb-3 text-white">${anime.title}</h2>
-            <p class="text-gray-300 mb-5 line-clamp-2 text-sm md:text-base">${anime.synopsis || ''}</p>
-            <button onclick="location.href='info.html?id=${anime.mal_id}'" class="bg-white/10 hover:bg-white/20 px-6 py-2 rounded-full font-medium text-white flex items-center">
-              <i class="fas fa-info-circle mr-2"></i> More Info
-            </button>
-          </div>
-        </div>
-      `).join('');
-
-      dots.innerHTML = animeList.slice(0, 5).map((_, i) => `
-        <button class="w-3 h-3 rounded-full ${i === 0 ? 'bg-primary' : 'bg-white/30'}" onclick="showHeroSlide(${i})"></button>
-      `).join('');
-
-      let currentSlide = 0;
-      setInterval(() => {
-        const slides = document.querySelectorAll('.hero-slide');
-        slides.forEach((s, j) => s.classList.remove('opacity-100'));
-        slides[currentSlide].classList.add('opacity-0');
-        currentSlide = (currentSlide + 1) % slides.length;
-        slides[currentSlide].classList.add('opacity-100');
-        updateHeroDots(currentSlide);
-      }, 5000);
-    }
-
-    function showHeroSlide(index) {
-      const slides = document.querySelectorAll('.hero-slide');
-      slides.forEach(s => s.classList.remove('opacity-100'));
-      slides[index].classList.add('opacity-100');
-      updateHeroDots(index);
-    }
-
-    function updateHeroDots(activeIndex) {
-      const dots = document.getElementById('hero-dots').children;
-      Array.from(dots).forEach((dot, i) => {
-        dot.className = `w-3 h-3 rounded-full ${i === activeIndex ? 'bg-primary' : 'bg-white/30'}`;
+    try {
+      const res = await fetch(ANILIST_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables })
       });
+
+      const json = await res.json();
+      return json.data.Media;
+
+    } catch {
+      return null;
     }
+  }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      initHeroSlider();
-      initAnimeSections();
-    });
+  function createCard(a) {
+    const title = a.title.english || a.title.romaji;
+    const poster = a.coverImage?.large || "";
+    const rating = a.averageScore ? (a.averageScore / 10).toFixed(1) : "N/A";
+    const year = a.startDate?.year || "—";
+    const episodes = a.episodes || "?";
 
-    fetch('header.html')
-      .then(res => res.text())
-      .then(html => document.getElementById('header').innerHTML = html);
-  </script>
+    return `
+      <div class="card rounded-xl overflow-hidden hover:scale-105 transition">
+        <img src="${poster}" class="w-full h-72 object-cover">
+        <div class="p-3">
+          <h3 class="text-sm font-medium line-clamp-2">${title}</h3>
+          <p class="text-xs text-gray-400 mt-1">
+            ${year} | ${episodes} eps | 
+            <i class="fa fa-star star"></i> ${rating}
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  // Fetch all anime data
+  const promises = animeList.map(fetchAniList);
+  const results = await Promise.all(promises);
+
+  const cards = results
+    .filter(a => a !== null)
+    .map(createCard);
+
+  grid.innerHTML = cards.join("");
+
+});
+</script>
 
 </body>
 </html>
