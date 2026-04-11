@@ -52,7 +52,71 @@ const grid = document.getElementById("grid");
 const searchInput = document.getElementById("search");
 const sortSelect = document.getElementById("sort");
 
-/* HEADER */
+/* =========================
+   SMALL UTILITIES (FIX CORE ISSUES)
+========================= */
+
+// sleep
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+// concurrency limiter
+function limitConcurrency(limit){
+  let active = 0;
+  let queue = [];
+
+  const next = () => {
+    if(active >= limit || queue.length === 0) return;
+
+    active++;
+    const {fn, resolve, reject} = queue.shift();
+
+    fn().then(resolve).catch(reject).finally(() => {
+      active--;
+      next();
+    });
+  };
+
+  return (fn) => new Promise((resolve, reject) => {
+    queue.push({fn, resolve, reject});
+    next();
+  });
+}
+
+const runLimited = limitConcurrency(5);
+
+// safe JSON fetch with retry
+async function fetchWithRetry(url, options = {}, retries = 3){
+  for(let i=0;i<=retries;i++){
+    try{
+      const res = await fetch(url, options);
+
+      if(!res.ok){
+        if(res.status === 429 || res.status >= 500){
+          throw new Error("Retryable HTTP " + res.status);
+        }
+        throw new Error("HTTP " + res.status);
+      }
+
+      const text = await res.text();
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        throw new Error("Invalid JSON");
+      }
+
+    }catch(err){
+      if(i === retries) return null;
+      await wait(500 * (i+1)); // backoff
+    }
+  }
+  return null;
+}
+
+/* =========================
+   HEADER
+========================= */
+
 fetch("header.html")
   .then(r=>r.text())
   .then(h=>{
@@ -63,12 +127,38 @@ fetch("header.html")
         document.body.style.paddingTop = header.offsetHeight+"px";
       }
     },100);
-  });
+  })
+  .catch(()=>{});
 
-/* LOAD DATA */
+/* =========================
+   CACHE SYSTEM
+========================= */
+
+function getCache(key){
+  try{
+    return JSON.parse(localStorage.getItem(key));
+  }catch{
+    return null;
+  }
+}
+
+function setCache(key, data){
+  try{
+    localStorage.setItem(key, JSON.stringify(data));
+  }catch{}
+}
+
+/* =========================
+   MAIN LOAD
+========================= */
+
 (async function(){
 
-  const json = await fetch(JSON_URL).then(r=>r.json());
+  const json = await fetchWithRetry(JSON_URL);
+  if(!json?.files){
+    grid.innerHTML = "<p>Failed to load base data</p>";
+    return;
+  }
 
   const map = {};
 
@@ -76,89 +166,119 @@ fetch("header.html")
     const key = f.mal_id || f.anilist_id || f.tmdb_id || f.tmdbs_id;
     if(!key) return;
 
-    if(!map[key]){
-      map[key] = {...f, count:1};
-    } else {
-      map[key].count++;
-    }
+    if(!map[key]) map[key] = {...f, count:1};
+    else map[key].count++;
   });
 
   const list = Object.values(map);
 
-  const results = await Promise.all(list.map(async a=>{
+  const results = [];
 
-    let api = null;
-    let type = "";
+  for(const a of list){
 
-    try{
-      // MAL / ANILIST
-      if(a.mal_id || a.anilist_id){
+    const cacheKey = "anime_" + (a.mal_id || a.anilist_id || a.tmdb_id || a.tmdbs_id);
+    const cached = getCache(cacheKey);
 
-        type = "anime";
+    if(cached){
+      results.push(cached);
+      continue;
+    }
 
-        const query = a.mal_id
-          ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
-          : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
+    const item = await runLimited(async () => {
 
-        const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+      let api = null;
+      let type = "";
 
-        const r = await fetch(ANILIST,{
-          method:"POST",
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({query,variables:vars})
-        });
+      try{
 
-        api = (await r.json()).data?.Media;
+        // ANIME (AniList)
+        if(a.mal_id || a.anilist_id){
+
+          type = "anime";
+
+          const query = a.mal_id
+            ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
+            : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
+
+          const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+
+          const r = await fetchWithRetry(ANILIST,{
+            method:"POST",
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({query,variables:vars})
+          });
+
+          api = r?.data?.Media || null;
+        }
+
+        // MOVIE
+        else if(a.tmdb_id){
+
+          type = "movie";
+
+          const d = await fetchWithRetry(
+            `https://api.themoviedb.org/3/movie/${a.tmdb_id}?api_key=${TMDB_KEY}`
+          );
+
+          if(d){
+            api = {
+              title:{english:d.title},
+              coverImage:{large:"https://image.tmdb.org/t/p/w500"+d.poster_path},
+              averageScore:d.vote_average*10,
+              popularity:d.popularity,
+              startDate:{year:(d.release_date||"").split("-")[0]}
+            };
+          }
+        }
+
+        // SERIES
+        else if(a.tmdbs_id){
+
+          type = "series";
+
+          const d = await fetchWithRetry(
+            `https://api.themoviedb.org/3/tv/${a.tmdbs_id}?api_key=${TMDB_KEY}`
+          );
+
+          if(d){
+            api = {
+              title:{english:d.name},
+              coverImage:{large:"https://image.tmdb.org/t/p/w500"+d.poster_path},
+              averageScore:d.vote_average*10,
+              popularity:d.popularity,
+              startDate:{year:(d.first_air_date||"").split("-")[0]},
+              episodes:d.number_of_episodes
+            };
+          }
+        }
+
+      }catch(e){
+        api = null;
       }
 
-      // TMDB MOVIE
-      else if(a.tmdb_id){
+      const result = {raw:a, api, type};
+      setCache(cacheKey, result);
+      return result;
+    });
 
-        type = "movie";
+    results.push(item);
 
-        const r = await fetch(`https://api.themoviedb.org/3/movie/${a.tmdb_id}?api_key=${TMDB_KEY}`);
-        const d = await r.json();
-
-        api = {
-          title:{english:d.title},
-          coverImage:{large:"https://image.tmdb.org/t/p/w500"+d.poster_path},
-          averageScore:d.vote_average*10,
-          popularity:d.popularity,
-          startDate:{year:(d.release_date||"").split("-")[0]}
-        };
-      }
-
-      // TMDB SERIES
-      else if(a.tmdbs_id){
-
-        type = "series";
-
-        const r = await fetch(`https://api.themoviedb.org/3/tv/${a.tmdbs_id}?api_key=${TMDB_KEY}`);
-        const d = await r.json();
-
-        api = {
-          title:{english:d.name},
-          coverImage:{large:"https://image.tmdb.org/t/p/w500"+d.poster_path},
-          averageScore:d.vote_average*10,
-          popularity:d.popularity,
-          startDate:{year:(d.first_air_date||"").split("-")[0]},
-          episodes:d.number_of_episodes
-        };
-      }
-
-    }catch{}
-
-    return {raw:a,api,type};
-
-  }));
+    // progressive render (prevents blank screen)
+    if(results.length % 20 === 0){
+      DATA = results;
+      render();
+    }
+  }
 
   DATA = results;
-
   render();
 
 })();
 
-/* LINK */
+/* =========================
+   LINK
+========================= */
+
 function link(x){
   const a = x.raw;
 
@@ -168,7 +288,10 @@ function link(x){
   if(a.tmdbs_id) return `anime.html?tmdbsid=${a.tmdbs_id}`;
 }
 
-/* CARD */
+/* =========================
+   CARD
+========================= */
+
 function card(x){
 
   const api = x.api || {};
@@ -191,7 +314,10 @@ function card(x){
   </a>`;
 }
 
-/* FILTER + SORT */
+/* =========================
+   FILTER + SORT
+========================= */
+
 function getFiltered(){
 
   let arr = [...DATA];
@@ -213,11 +339,9 @@ function getFiltered(){
       arr.sort((a,b)=>(b.api?.averageScore||0)-(a.api?.averageScore||0));
       break;
     case "title":
-      arr.sort((a,b)=>{
-        const ta = (a.api?.title?.english||"");
-        const tb = (b.api?.title?.english||"");
-        return ta.localeCompare(tb);
-      });
+      arr.sort((a,b)=>
+        (a.api?.title?.english||"").localeCompare(b.api?.title?.english||"")
+      );
       break;
     default:
       arr.sort((a,b)=>(b.api?.startDate?.year||0)-(a.api?.startDate?.year||0));
@@ -226,7 +350,10 @@ function getFiltered(){
   return arr;
 }
 
-/* RENDER */
+/* =========================
+   RENDER
+========================= */
+
 function render(){
 
   const arr = getFiltered();
@@ -239,11 +366,13 @@ function render(){
   renderPagination(arr.length);
 }
 
-/* PAGINATION */
+/* =========================
+   PAGINATION
+========================= */
+
 function renderPagination(total){
 
   const pages = Math.ceil(total/PER_PAGE);
-
   let html = "";
 
   for(let i=1;i<=pages;i++){
