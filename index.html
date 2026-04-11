@@ -5,22 +5,36 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Neek — Anime</title>
 
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
     body {
-      background:#000;
-      color:#fff;
+      background: #000;
+      color: #fff;
     }
 
-    .card { background:#111; }
-    .accent { color:#ff4444; }
+    a {
+      text-decoration: none !important;
+      color: white !important;
+    }
+
+    .card {
+      background: #111;
+    }
+
+    .accent {
+      color: #ff4444;
+    }
   </style>
 </head>
 
 <body class="min-h-screen flex flex-col">
 
+<!-- Header -->
 <div id="header"></div>
 
 <main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-16">
@@ -54,8 +68,6 @@
 
 </main>
 
-<div id="footer"></div>
-
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
 
@@ -66,35 +78,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   const popGrid = document.getElementById("popular-grid");
   const libGrid = document.getElementById("library-grid");
 
-  // Load header/footer
-  Promise.all([
-    fetch("header.html").then(r=>r.text()),
-    fetch("footer.html").then(r=>r.text())
-  ]).then(([h,f])=>{
-    header.innerHTML = h;
-    footer.innerHTML = f;
-  });
+  // Load header ONLY
+  fetch("header.html")
+    .then(r => r.text())
+    .then(h => document.getElementById("header").innerHTML = h);
 
   // Fetch JSON
   const res = await fetch(JSON_URL);
   const data = await res.json();
 
-  // Extract date from title
+  // Extract date from filename
   function extractDate(title) {
     const match = title.match(/\[(\w+ \d{1,2}, \d{4})\]/);
     return match ? new Date(match[1]) : null;
   }
 
-  // Deduplicate anime
+  // Build anime map (FIXED)
   const map = {};
 
   data.files.forEach(file => {
-    const key = file.mal_id || file.anilist_id || file.tmdb_id || file.tmdbs_id;
+    const key =
+      file.mal_id ||
+      file.anilist_id ||
+      file.tmdb_id ||
+      file.tmdbs_id;
+
     if (!key) return;
 
     if (!map[key]) {
-      map[key] = { ...file, latestDate: extractDate(file.title) };
+      map[key] = {
+        ...file,
+        latestDate: extractDate(file.title),
+        count: 1
+      };
     } else {
+      map[key].count++;
+
       const d = extractDate(file.title);
       if (d && (!map[key].latestDate || d > map[key].latestDate)) {
         map[key].latestDate = d;
@@ -104,22 +123,40 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const animeList = Object.values(map);
 
-  // Sort NEW RELEASES
+  // NEW RELEASES (latest by date)
   const newReleases = [...animeList]
     .filter(a => a.latestDate)
-    .sort((a,b)=>b.latestDate - a.latestDate)
-    .slice(0,10);
+    .sort((a, b) => b.latestDate - a.latestDate)
+    .slice(0, 10);
 
   // AniList fetch
   async function fetchAniList(anime) {
     let query, variables;
 
     if (anime.anilist_id) {
-      query = `query($id:Int){Media(id:$id,type:ANIME){id title{romaji english} coverImage{large} averageScore startDate{year}}}`;
+      query = `query($id:Int){
+        Media(id:$id,type:ANIME){
+          id
+          title{romaji english}
+          coverImage{large}
+          averageScore
+          startDate{year}
+          episodes
+        }
+      }`;
       variables = { id: anime.anilist_id };
 
     } else if (anime.mal_id) {
-      query = `query($idMal:Int){Media(idMal:$idMal,type:ANIME){id title{romaji english} coverImage{large} averageScore startDate{year}}}`;
+      query = `query($idMal:Int){
+        Media(idMal:$idMal,type:ANIME){
+          id
+          title{romaji english}
+          coverImage{large}
+          averageScore
+          startDate{year}
+          episodes
+        }
+      }`;
       variables = { idMal: parseInt(anime.mal_id) };
 
     } else {
@@ -127,18 +164,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     try {
-      const res = await fetch(ANILIST_API,{
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
+      const res = await fetch(ANILIST_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, variables })
       });
+
       const json = await res.json();
       return json.data.Media;
+
     } catch {
       return null;
     }
   }
 
+  // Routing links
   function getLink(a) {
     if (a.mal_id) return `/anime.html?malid=${a.mal_id}`;
     if (a.anilist_id) return `/anime.html?anilisid=${a.anilist_id}`;
@@ -147,40 +187,60 @@ document.addEventListener("DOMContentLoaded", async () => {
     return "#";
   }
 
-  function createCard(apiData, raw) {
-    if (!apiData) return "";
+  // Card UI
+  function createCard(api, raw) {
+    if (!api) return "";
 
-    const title = apiData.title.english || apiData.title.romaji;
-    const img = apiData.coverImage?.large || "";
-    const rating = apiData.averageScore ? (apiData.averageScore/10).toFixed(1) : "N/A";
-    const year = apiData.startDate?.year || "—";
+    const title = api.title.english || api.title.romaji;
+    const img = api.coverImage?.large || "";
+    const rating = api.averageScore ? (api.averageScore / 10).toFixed(1) : "N/A";
+    const year = api.startDate?.year || "—";
+
+    const current = raw.count;
+    const total = api.episodes || "?";
 
     return `
-      <a href="${getLink(raw)}" class="card rounded-xl overflow-hidden hover:scale-105 transition block">
+      <a href="${getLink(raw)}"
+         class="card rounded-xl overflow-hidden hover:scale-105 transition block">
+
         <img src="${img}" class="w-full h-72 object-cover">
+
         <div class="p-3">
-          <h3 class="text-sm line-clamp-2">${title}</h3>
+          <h3 class="text-sm line-clamp-2 text-white">
+            ${title}
+          </h3>
+
           <p class="text-xs text-gray-400 mt-1">
-            ${year} | ⭐ ${rating}
+            ${year} | ${current}/${total} eps | ⭐ ${rating}
           </p>
         </div>
+
       </a>
     `;
   }
 
-  // Fetch New Releases
+  // Render sections
+
+  // NEW
   const newData = await Promise.all(newReleases.map(fetchAniList));
-  newGrid.innerHTML = newData.map((d,i)=>createCard(d,newReleases[i])).join("");
+  newGrid.innerHTML = newData
+    .map((d, i) => createCard(d, newReleases[i]))
+    .join("");
 
-  // Popular (just random high score from AniList)
-  const popular = animeList.slice(0,15);
+  // POPULAR (basic for now)
+  const popular = animeList.slice(0, 15);
   const popData = await Promise.all(popular.map(fetchAniList));
-  popGrid.innerHTML = popData.slice(0,10).map((d,i)=>createCard(d,popular[i])).join("");
+  popGrid.innerHTML = popData
+    .slice(0, 10)
+    .map((d, i) => createCard(d, popular[i]))
+    .join("");
 
-  // Library
-  const lib = animeList.slice(0,10);
-  const libData = await Promise.all(lib.map(fetchAniList));
-  libGrid.innerHTML = libData.map((d,i)=>createCard(d,lib[i])).join("");
+  // LIBRARY (FIXED)
+  const library = animeList.slice(0, 10);
+  const libData = await Promise.all(library.map(fetchAniList));
+  libGrid.innerHTML = libData
+    .map((d, i) => createCard(d, library[i]))
+    .join("");
 
 });
 </script>
