@@ -11,6 +11,7 @@
 <style>
 body { background:#000; color:#fff; }
 
+/* Clamp */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -22,6 +23,13 @@ body { background:#000; color:#fff; }
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ✅ FIX: bottom nav overlap */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: 80px;
+  }
 }
 </style>
 </head>
