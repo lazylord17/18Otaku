@@ -127,8 +127,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function link(a){
-    if(a.mal_id) return `/anime.html?malid=${a.mal_id}`;
-    if(a.anilist_id) return `/anime.html?anilisid=${a.anilist_id}`;
+    if(a.mal_id) return `anime.html?malid=${a.mal_id}`;
+    if(a.anilist_id) return `anime.html?anilisid=${a.anilist_id}`;
     return "#";
   }
 
