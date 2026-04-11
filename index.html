@@ -5,159 +5,182 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Neek — Anime</title>
 
-  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
   <style>
-    :root {
-      --accent:#ff4444;
-      --bg:#0b0b0b;
-      --muted:#9b9b9b;
-    }
-
-    html,body {
-      background:var(--bg);
+    body {
+      background:#000;
       color:#fff;
     }
 
-    .card { background:#1a1a1a; }
-    .star { color:var(--accent); }
+    .card { background:#111; }
+    .accent { color:#ff4444; }
   </style>
 </head>
 
 <body class="min-h-screen flex flex-col">
 
-<!-- Header -->
 <div id="header"></div>
 
-<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-10">
+<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-16">
 
-  <h1 class="text-3xl font-bold flex items-center gap-2">
-    <i class="fa-solid fa-dragon text-[--accent]"></i> Anime Library
-  </h1>
+  <!-- NEW RELEASES -->
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+      <i class="fa-solid fa-bolt accent"></i> New Releases
+    </h2>
+    <div id="new-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
 
-  <div id="anime-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  <!-- POPULAR -->
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+      <i class="fa-solid fa-fire accent"></i> Popular Anime
+    </h2>
+    <div id="popular-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section>
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold flex items-center gap-2">
+        <i class="fa-solid fa-folder accent"></i> Anime Library
+      </h2>
+      <a href="/library.html" class="text-sm hover:text-red-400">View All →</a>
+    </div>
+    <div id="library-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
 
 </main>
 
-<!-- Footer -->
 <div id="footer"></div>
 
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
 
-  // Load header/footer
-  Promise.all([
-    fetch("header.html").then(r => r.text()),
-    fetch("footer.html").then(r => r.text())
-  ]).then(([h,f])=>{
-    document.getElementById("header").innerHTML = h;
-    document.getElementById("footer").innerHTML = f;
-  });
-
   const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
   const ANILIST_API = "https://graphql.anilist.co";
 
-  const grid = document.getElementById("anime-grid");
+  const newGrid = document.getElementById("new-grid");
+  const popGrid = document.getElementById("popular-grid");
+  const libGrid = document.getElementById("library-grid");
 
-  // Fetch your JSON
+  // Load header/footer
+  Promise.all([
+    fetch("header.html").then(r=>r.text()),
+    fetch("footer.html").then(r=>r.text())
+  ]).then(([h,f])=>{
+    header.innerHTML = h;
+    footer.innerHTML = f;
+  });
+
+  // Fetch JSON
   const res = await fetch(JSON_URL);
   const data = await res.json();
 
-  // Get unique anime IDs
-  const unique = {};
+  // Extract date from title
+  function extractDate(title) {
+    const match = title.match(/\[(\w+ \d{1,2}, \d{4})\]/);
+    return match ? new Date(match[1]) : null;
+  }
+
+  // Deduplicate anime
+  const map = {};
+
   data.files.forEach(file => {
-    const id = file.mal_id || file.anilist_id;
-    if (id && !unique[id]) {
-      unique[id] = file;
+    const key = file.mal_id || file.anilist_id || file.tmdb_id || file.tmdbs_id;
+    if (!key) return;
+
+    if (!map[key]) {
+      map[key] = { ...file, latestDate: extractDate(file.title) };
+    } else {
+      const d = extractDate(file.title);
+      if (d && (!map[key].latestDate || d > map[key].latestDate)) {
+        map[key].latestDate = d;
+      }
     }
   });
 
-  const animeList = Object.values(unique).slice(0, 20);
+  const animeList = Object.values(map);
 
+  // Sort NEW RELEASES
+  const newReleases = [...animeList]
+    .filter(a => a.latestDate)
+    .sort((a,b)=>b.latestDate - a.latestDate)
+    .slice(0,10);
+
+  // AniList fetch
   async function fetchAniList(anime) {
     let query, variables;
 
     if (anime.anilist_id) {
-      query = `
-        query ($id: Int) {
-          Media(id: $id, type: ANIME) {
-            id
-            title { romaji english }
-            coverImage { large }
-            averageScore
-            startDate { year }
-            episodes
-          }
-        }
-      `;
+      query = `query($id:Int){Media(id:$id,type:ANIME){id title{romaji english} coverImage{large} averageScore startDate{year}}}`;
       variables = { id: anime.anilist_id };
 
-    } else {
-      // MAL -> AniList
-      query = `
-        query ($idMal: Int) {
-          Media(idMal: $idMal, type: ANIME) {
-            id
-            title { romaji english }
-            coverImage { large }
-            averageScore
-            startDate { year }
-            episodes
-          }
-        }
-      `;
+    } else if (anime.mal_id) {
+      query = `query($idMal:Int){Media(idMal:$idMal,type:ANIME){id title{romaji english} coverImage{large} averageScore startDate{year}}}`;
       variables = { idMal: parseInt(anime.mal_id) };
+
+    } else {
+      return null;
     }
 
     try {
-      const res = await fetch(ANILIST_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch(ANILIST_API,{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({ query, variables })
       });
-
       const json = await res.json();
       return json.data.Media;
-
     } catch {
       return null;
     }
   }
 
-  function createCard(a) {
-    const title = a.title.english || a.title.romaji;
-    const poster = a.coverImage?.large || "";
-    const rating = a.averageScore ? (a.averageScore / 10).toFixed(1) : "N/A";
-    const year = a.startDate?.year || "—";
-    const episodes = a.episodes || "?";
+  function getLink(a) {
+    if (a.mal_id) return `/anime.html?malid=${a.mal_id}`;
+    if (a.anilist_id) return `/anime.html?anilisid=${a.anilist_id}`;
+    if (a.tmdb_id) return `/anime.html?tmdbid=${a.tmdb_id}`;
+    if (a.tmdbs_id) return `/anime.html?tmdbsid=${a.tmdbs_id}`;
+    return "#";
+  }
+
+  function createCard(apiData, raw) {
+    if (!apiData) return "";
+
+    const title = apiData.title.english || apiData.title.romaji;
+    const img = apiData.coverImage?.large || "";
+    const rating = apiData.averageScore ? (apiData.averageScore/10).toFixed(1) : "N/A";
+    const year = apiData.startDate?.year || "—";
 
     return `
-      <div class="card rounded-xl overflow-hidden hover:scale-105 transition">
-        <img src="${poster}" class="w-full h-72 object-cover">
+      <a href="${getLink(raw)}" class="card rounded-xl overflow-hidden hover:scale-105 transition block">
+        <img src="${img}" class="w-full h-72 object-cover">
         <div class="p-3">
-          <h3 class="text-sm font-medium line-clamp-2">${title}</h3>
+          <h3 class="text-sm line-clamp-2">${title}</h3>
           <p class="text-xs text-gray-400 mt-1">
-            ${year} | ${episodes} eps | 
-            <i class="fa fa-star star"></i> ${rating}
+            ${year} | ⭐ ${rating}
           </p>
         </div>
-      </div>
+      </a>
     `;
   }
 
-  // Fetch all anime data
-  const promises = animeList.map(fetchAniList);
-  const results = await Promise.all(promises);
+  // Fetch New Releases
+  const newData = await Promise.all(newReleases.map(fetchAniList));
+  newGrid.innerHTML = newData.map((d,i)=>createCard(d,newReleases[i])).join("");
 
-  const cards = results
-    .filter(a => a !== null)
-    .map(createCard);
+  // Popular (just random high score from AniList)
+  const popular = animeList.slice(0,15);
+  const popData = await Promise.all(popular.map(fetchAniList));
+  popGrid.innerHTML = popData.slice(0,10).map((d,i)=>createCard(d,popular[i])).join("");
 
-  grid.innerHTML = cards.join("");
+  // Library
+  const lib = animeList.slice(0,10);
+  const libData = await Promise.all(lib.map(fetchAniList));
+  libGrid.innerHTML = libData.map((d,i)=>createCard(d,lib[i])).join("");
 
 });
 </script>
