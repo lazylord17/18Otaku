@@ -1,10 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Neek — Anime</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    body { background:#000; color:#fff; }
+    a { color:#fff !important; text-decoration:none !important; }
+    .card { background:#111; }
+    .accent { color:#ff4444; }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+<div id="header"></div>
+
+<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-16">
+
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
+      <i class="fa-solid fa-bolt accent"></i> New Releases
+    </h2>
+    <div id="new-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
+      <i class="fa-solid fa-fire accent"></i> Popular Anime
+    </h2>
+    <div id="popular-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
+      <i class="fa-solid fa-folder accent"></i> Anime Library
+    </h2>
+    <div id="library-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+</main>
+
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
 
   const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
   const API = "https://graphql.anilist.co";
 
-  const CACHE_KEY = "anime_cache_v2";
+  const CACHE_KEY = "anime_cache_v3";
   const CACHE_TIME = 86400000;
 
   const FALLBACK = "https://via.placeholder.com/300x450?text=No+Image";
@@ -13,51 +60,44 @@ document.addEventListener("DOMContentLoaded", async () => {
   const popGrid = document.getElementById("popular-grid");
   const libGrid = document.getElementById("library-grid");
 
-  /* =========================
-     HEADER SAFE LOAD
-  ========================= */
-  fetch("header.html")
-    .then(r => r.text())
-    .then(h => {
-      const el = document.getElementById("header");
-      if (el) el.innerHTML = h;
-    })
-    .catch(() => {});
-
-  /* =========================
-     SAFE FETCH WITH RETRY
-  ========================= */
-  async function fetchWithRetry(url, options = {}, retries = 3){
-    for(let i=0;i<=retries;i++){
-      try{
-        const r = await fetch(url, options);
-        if(!r.ok) throw new Error("HTTP " + r.status);
-        return await r.json();
-      }catch(e){
-        if(i === retries) return null;
-        await new Promise(res => setTimeout(res, 400 * (i+1)));
-      }
-    }
-    return null;
+  /* ================= SAFE HEADER ================= */
+  try {
+    const headerEl = document.getElementById("header");
+    const h = await fetch("header.html").then(r => r.text());
+    if(headerEl) headerEl.innerHTML = h;
+  } catch (e) {
+    console.log("Header load failed");
   }
 
-  /* =========================
-     CONCURRENCY LIMITER (CRITICAL FIX)
-  ========================= */
-  function limitConcurrency(limit){
+  /* ================= SAFE FETCH ================= */
+  async function safeFetch(url, options){
+    try{
+      const r = await fetch(url, options);
+      if(!r.ok) return null;
+      return await r.json();
+    }catch{
+      return null;
+    }
+  }
+
+  /* ================= LIMITER ================= */
+  function limit(n){
     let active = 0;
     let queue = [];
 
     const next = () => {
-      if(active >= limit || queue.length === 0) return;
+      if(active >= n || queue.length === 0) return;
 
       active++;
       const {fn, resolve} = queue.shift();
 
-      fn().then(resolve).catch(() => resolve(null)).finally(() => {
-        active--;
-        next();
-      });
+      fn()
+        .then(resolve)
+        .catch(() => resolve(null))
+        .finally(() => {
+          active--;
+          next();
+        });
     };
 
     return (fn) => new Promise(resolve => {
@@ -66,42 +106,29 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  const runLimited = limitConcurrency(4); // VERY IMPORTANT
+  const run = limit(3);
 
-  /* =========================
-     LOAD JSON
-  ========================= */
-  const json = await fetchWithRetry(JSON_URL);
+  /* ================= LOAD JSON ================= */
+  const json = await safeFetch(JSON_URL);
+
   if(!json?.files){
-    newGrid.innerHTML = "Failed to load data";
+    newGrid.innerHTML = "<p>Failed to load data</p>";
     return;
   }
 
-  /* =========================
-     BUILD MAP
-  ========================= */
-  function extractDate(t) {
-    const m = t.match(/\[(\w+ \d{1,2}, \d{4})\]/);
-    return m ? new Date(m[1]) : new Date(0);
-  }
-
   const map = {};
+
   json.files.forEach(f=>{
     const key = f.mal_id || f.anilist_id;
-    if (!key) return;
+    if(!key) return;
 
-    if (!map[key]) {
-      map[key] = { ...f, count:1, latestDate: extractDate(f.title) };
-    } else {
-      map[key].count++;
-    }
+    if(!map[key]) map[key] = {...f, count:1};
+    else map[key].count++;
   });
 
-  const animeList = Object.values(map);
+  const list = Object.values(map);
 
-  /* =========================
-     CACHE
-  ========================= */
+  /* ================= CACHE ================= */
   let cache = {};
   try{
     cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
@@ -111,14 +138,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   }
 
-  /* =========================
-     ANI FETCH (SAFE)
-  ========================= */
+  /* ================= ANI FETCH ================= */
   async function fetchAni(a){
 
     const key = a.mal_id || a.anilist_id;
 
-    if (cache[key] && Date.now() - cache[key].t < CACHE_TIME) {
+    if(cache[key] && Date.now() - cache[key].t < CACHE_TIME){
       return cache[key].d;
     }
 
@@ -128,13 +153,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
 
-    const res = await fetchWithRetry(API,{
+    const res = await safeFetch(API,{
       method:"POST",
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({query,variables:vars})
     });
 
-    const d = res?.data?.Media;
+    const d = res?.data?.Media || null;
 
     if(d){
       cache[key] = {d,t:Date.now()};
@@ -151,11 +176,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function card(api, raw, blur=false){
+
     if(!api){
       return `
       <div class="card rounded-xl overflow-hidden opacity-40">
         <img src="${FALLBACK}" class="w-full h-72 object-cover">
-        <div class="p-3 text-xs">Loading failed</div>
+        <div class="p-3 text-xs">No data</div>
       </div>`;
     }
 
@@ -165,16 +191,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     const year = api.startDate?.year || "—";
 
     return `
-    <a href="${blur?'library.html':link(raw)}"
-       class="card block relative rounded-xl overflow-hidden">
+    <a href="${blur ? 'library.html' : link(raw)}"
+       class="card block rounded-xl overflow-hidden">
 
       <img src="${img}" onerror="this.src='${FALLBACK}'"
         class="w-full h-72 object-cover ${blur?'blur-sm brightness-50':''}">
 
-      ${blur?'<div class="absolute inset-0 flex items-center justify-center font-bold">VIEW ALL →</div>':''}
-
       <div class="p-3">
-        <h3 class="text-sm line-clamp-2">${title}</h3>
+        <h3 class="text-sm">${title}</h3>
         <p class="text-xs text-gray-400">
           ${year} | ${raw.count}/${api.episodes||'?'} eps | ⭐ ${rating}
         </p>
@@ -182,63 +206,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     </a>`;
   }
 
-  /* =========================
-     PROCESS WITH LIMIT (FIX)
-  ========================= */
-
+  /* ================= SAFE LOOP (NO CRASH) ================= */
   const apiData = [];
 
-  for(let i=0;i<animeList.length;i++){
-    const item = await runLimited(() => fetchAni(animeList[i]));
-    apiData.push(item);
+  for(let i=0;i<list.length;i++){
+    const d = await run(() => fetchAni(list[i]));
+    apiData.push(d);
 
-    // progressive render (important UX fix)
-    if(i % 20 === 0){
-      renderPartial();
-    }
+    if(i % 20 === 0) render();
   }
 
-  const merged = animeList
-    .map((a,i)=>({raw:a,api:apiData[i]}))
-    .filter(x=>x.raw); // don't kill UI
+  function render(){
 
-  /* =========================
-     RENDER SAFE
-  ========================= */
-
-  function renderPartial(){
-
-    const safe = animeList.slice(0, Math.min(apiData.length, animeList.length))
-      .map((a,i)=>({raw:a,api:apiData[i]}))
+    const merged = list.map((a,i)=>({raw:a,api:apiData[i]}))
       .filter(x=>x.api);
 
-    renderBlocks(safe);
-  }
-
-  function renderBlocks(merged){
-
-    const newList = [...merged]
-      .sort((a,b)=>b.raw.latestDate - a.raw.latestDate)
-      .slice(0,10);
+    const newList = merged.slice(0,10);
+    const pop = merged.slice(0,10);
+    const lib = merged.slice(0,10);
 
     newGrid.innerHTML = newList.map(x=>card(x.api,x.raw)).join("");
-
-    const pop = [...merged]
-      .sort((a,b)=>(b.api?.popularity||0)-(a.api?.popularity||0))
-      .slice(0,10);
-
     popGrid.innerHTML = pop.map(x=>card(x.api,x.raw)).join("");
-
-    const lib = [...merged]
-      .sort((a,b)=>(b.api?.startDate?.year||0)-(a.api?.startDate?.year||0))
-      .slice(0,10);
-
     libGrid.innerHTML = lib.map((x,i)=>
       i===9 ? card(x.api,x.raw,true) : card(x.api,x.raw)
     ).join("");
   }
 
-  renderBlocks(merged);
+  render();
 
 });
 </script>
+
+</body>
+</html>
