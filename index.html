@@ -22,25 +22,22 @@
 
 <main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-16">
 
-  <!-- NEW -->
   <section>
-    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
       <i class="fa-solid fa-bolt accent"></i> New Releases
     </h2>
     <div id="new-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
   </section>
 
-  <!-- POPULAR -->
   <section>
-    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
       <i class="fa-solid fa-fire accent"></i> Popular Anime
     </h2>
     <div id="popular-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
   </section>
 
-  <!-- LIBRARY -->
   <section>
-    <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
       <i class="fa-solid fa-folder accent"></i> Anime Library
     </h2>
     <div id="library-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
@@ -52,7 +49,12 @@
 document.addEventListener("DOMContentLoaded", async () => {
 
   const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
-  const ANILIST_API = "https://graphql.anilist.co";
+  const API = "https://graphql.anilist.co";
+
+  const CACHE_KEY = "anime_cache_v2";
+  const CACHE_TIME = 86400000;
+
+  const FALLBACK = "https://via.placeholder.com/300x450?text=No+Image";
 
   const newGrid = document.getElementById("new-grid");
   const popGrid = document.getElementById("popular-grid");
@@ -61,160 +63,124 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Header
   fetch("header.html")
     .then(r=>r.text())
-    .then(h=>document.getElementById("header").innerHTML = h);
+    .then(h=>header.innerHTML = h);
 
+  // Fetch JSON
   const res = await fetch(JSON_URL);
-  const data = await res.json();
+  const json = await res.json();
 
-  function extractDate(title) {
-    const match = title.match(/\[(\w+ \d{1,2}, \d{4})\]/);
-    return match ? new Date(match[1]) : null;
+  function extractDate(t) {
+    const m = t.match(/\[(\w+ \d{1,2}, \d{4})\]/);
+    return m ? new Date(m[1]) : null;
   }
 
-  // MAP BUILD
+  // Build anime map
   const map = {};
-
-  data.files.forEach(file => {
-    const key = file.mal_id || file.anilist_id || file.tmdb_id || file.tmdbs_id;
+  json.files.forEach(f=>{
+    const key = f.mal_id || f.anilist_id;
     if (!key) return;
 
     if (!map[key]) {
-      map[key] = {
-        ...file,
-        latestDate: extractDate(file.title),
-        count: 1
-      };
+      map[key] = { ...f, count:1, latestDate: extractDate(f.title) };
     } else {
       map[key].count++;
-
-      const d = extractDate(file.title);
-      if (d && (!map[key].latestDate || d > map[key].latestDate)) {
-        map[key].latestDate = d;
-      }
     }
   });
 
   const animeList = Object.values(map);
 
-  // AniList fetch
-  async function fetchAniList(anime) {
-    let query, variables;
+  // CACHE
+  let cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
 
-    if (anime.anilist_id) {
-      query = `query($id:Int){
-        Media(id:$id,type:ANIME){
-          id title{romaji english}
-          coverImage{large}
-          averageScore popularity
-          startDate{year}
-          episodes
-        }
-      }`;
-      variables = { id: anime.anilist_id };
+  async function fetchAni(a){
+    const key = a.mal_id || a.anilist_id;
 
-    } else if (anime.mal_id) {
-      query = `query($idMal:Int){
-        Media(idMal:$idMal,type:ANIME){
-          id title{romaji english}
-          coverImage{large}
-          averageScore popularity
-          startDate{year}
-          episodes
-        }
-      }`;
-      variables = { idMal: parseInt(anime.mal_id) };
+    if (cache[key] && Date.now()-cache[key].t < CACHE_TIME) {
+      return cache[key].d;
+    }
 
-    } else return null;
+    const query = a.mal_id
+      ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
+      : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
 
-    try {
-      const res = await fetch(ANILIST_API,{
+    const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+
+    try{
+      const r = await fetch(API,{
         method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ query, variables })
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query,variables:vars})
       });
-      const json = await res.json();
-      return json.data.Media;
-    } catch {
+
+      const j = await r.json();
+      const d = j.data?.Media;
+
+      if(d){
+        cache[key] = {d,t:Date.now()};
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      }
+
+      return d;
+    }catch{
       return null;
     }
   }
 
-  function getLink(a) {
-    if (a.mal_id) return `/anime.html?malid=${a.mal_id}`;
-    if (a.anilist_id) return `/anime.html?anilisid=${a.anilist_id}`;
-    if (a.tmdb_id) return `/anime.html?tmdbid=${a.tmdb_id}`;
-    if (a.tmdbs_id) return `/anime.html?tmdbsid=${a.tmdbs_id}`;
+  function link(a){
+    if(a.mal_id) return `/anime.html?malid=${a.mal_id}`;
+    if(a.anilist_id) return `/anime.html?anilisid=${a.anilist_id}`;
     return "#";
   }
 
-  function createCard(api, raw, blur=false) {
-    if (!api) return "";
+  function card(api,raw,blur=false){
+    if(!api) return "";
 
     const title = api.title.english || api.title.romaji;
-    const img = api.coverImage?.large || "";
+    const img = api.coverImage?.large || FALLBACK;
     const rating = api.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
     const year = api.startDate?.year || "—";
 
-    const current = raw.count;
-    const total = api.episodes || "?";
-
     return `
-      <a href="${blur ? '/library.html' : getLink(raw)}"
-         class="card rounded-xl overflow-hidden transition block relative">
-
-        <img src="${img}" class="w-full h-72 object-cover ${blur ? 'blur-sm brightness-50' : ''}">
-
-        ${blur ? `
-          <div class="absolute inset-0 flex items-center justify-center text-white font-bold text-lg">
-            VIEW ALL →
-          </div>
-        ` : ""}
-
-        <div class="p-3">
-          <h3 class="text-sm line-clamp-2">${title}</h3>
-          <p class="text-xs text-gray-400 mt-1">
-            ${year} | ${current}/${total} eps | ⭐ ${rating}
-          </p>
-        </div>
-
-      </a>
-    `;
+    <a href="${blur?'/library.html':link(raw)}" class="card block relative rounded-xl overflow-hidden">
+      <img src="${img}" onerror="this.src='${FALLBACK}'"
+        class="w-full h-72 object-cover ${blur?'blur-sm brightness-50':''}">
+      ${blur?'<div class="absolute inset-0 flex items-center justify-center font-bold">VIEW ALL →</div>':''}
+      <div class="p-3">
+        <h3 class="text-sm line-clamp-2">${title}</h3>
+        <p class="text-xs text-gray-400">
+          ${year} | ${raw.count}/${api.episodes||'?'} eps | ⭐ ${rating}
+        </p>
+      </div>
+    </a>`;
   }
 
-  // FETCH ALL ANILIST DATA ONCE
-  const apiData = await Promise.all(animeList.map(fetchAniList));
+  // Fetch all (parallel)
+  const apiData = await Promise.all(animeList.map(fetchAni));
 
-  const merged = animeList.map((a,i)=>({
-    raw: a,
-    api: apiData[i]
-  })).filter(x=>x.api);
+  const merged = animeList.map((a,i)=>({raw:a,api:apiData[i]})).filter(x=>x.api);
 
-  // NEW RELEASES
-  const newReleases = [...merged]
-    .filter(x=>x.raw.latestDate)
+  // NEW
+  const newList = [...merged]
     .sort((a,b)=>b.raw.latestDate - a.raw.latestDate)
     .slice(0,10);
 
-  newGrid.innerHTML = newReleases.map(x=>createCard(x.api,x.raw)).join("");
+  newGrid.innerHTML = newList.map(x=>card(x.api,x.raw)).join("");
 
   // POPULAR
-  const popular = [...merged]
-    .sort((a,b)=>(b.api.popularity || b.api.averageScore) - (a.api.popularity || a.api.averageScore))
+  const pop = [...merged]
+    .sort((a,b)=>b.api.popularity - a.api.popularity)
     .slice(0,10);
 
-  popGrid.innerHTML = popular.map(x=>createCard(x.api,x.raw)).join("");
+  popGrid.innerHTML = pop.map(x=>card(x.api,x.raw)).join("");
 
-  // LIBRARY (by anime release date)
-  const library = [...merged]
-    .sort((a,b)=>(b.api.startDate.year || 0) - (a.api.startDate.year || 0))
+  // LIBRARY
+  const lib = [...merged]
+    .sort((a,b)=>b.api.startDate.year - a.api.startDate.year)
     .slice(0,10);
 
-  const libHTML = library.map((x,i)=>{
-    if (i === 9) return createCard(x.api,x.raw,true);
-    return createCard(x.api,x.raw);
-  }).join("");
-
-  libGrid.innerHTML = libHTML;
+  libGrid.innerHTML = lib.map((x,i)=>
+    i===9 ? card(x.api,x.raw,true) : card(x.api,x.raw)
+  ).join("");
 
 });
 </script>
