@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Neek — Anime</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    body { background:#000; color:#fff; }
+    a { color:#fff !important; text-decoration:none !important; }
+    .card { background:#111; }
+    .accent { color:#ff4444; }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+<div id="header"></div>
+
+<main class="flex-1 max-w-6xl mx-auto px-4 py-10 space-y-16">
+
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
+      <i class="fa-solid fa-bolt accent"></i> New Releases
+    </h2>
+    <div id="new-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
+      <i class="fa-solid fa-fire accent"></i> Popular Anime
+    </h2>
+    <div id="popular-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+  <section>
+    <h2 class="text-2xl font-bold mb-6 flex gap-2">
+      <i class="fa-solid fa-folder accent"></i> Anime Library
+    </h2>
+    <div id="library-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-5"></div>
+  </section>
+
+</main>
+
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+
+  const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
+  const API = "https://graphql.anilist.co";
+
+  const CACHE_KEY = "anime_cache_v2";
+  const CACHE_TIME = 86400000;
+
+  const FALLBACK = "https://via.placeholder.com/300x450?text=No+Image";
+
+  const newGrid = document.getElementById("new-grid");
+  const popGrid = document.getElementById("popular-grid");
+  const libGrid = document.getElementById("library-grid");
+
+  // Header
+  fetch("header.html")
+    .then(r=>r.text())
+    .then(h=>header.innerHTML = h);
+
+  // Fetch JSON
+  const res = await fetch(JSON_URL);
+  const json = await res.json();
+
+  function extractDate(t) {
+    const m = t.match(/\[(\w+ \d{1,2}, \d{4})\]/);
+    return m ? new Date(m[1]) : null;
+  }
+
+  // Build anime map
+  const map = {};
+  json.files.forEach(f=>{
+    const key = f.mal_id || f.anilist_id;
+    if (!key) return;
+
+    if (!map[key]) {
+      map[key] = { ...f, count:1, latestDate: extractDate(f.title) };
+    } else {
+      map[key].count++;
+    }
+  });
+
+  const animeList = Object.values(map);
+
+  // CACHE
+  let cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
+
+  async function fetchAni(a){
+    const key = a.mal_id || a.anilist_id;
+
+    if (cache[key] && Date.now()-cache[key].t < CACHE_TIME) {
+      return cache[key].d;
+    }
+
+    const query = a.mal_id
+      ? `query($idMal:Int){Media(idMal:$idMal,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`
+      : `query($id:Int){Media(id:$id,type:ANIME){title{romaji english}coverImage{large}averageScore popularity startDate{year} episodes}}`;
+
+    const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
+
+    try{
+      const r = await fetch(API,{
+        method:"POST",
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query,variables:vars})
+      });
+
+      const j = await r.json();
+      const d = j.data?.Media;
+
+      if(d){
+        cache[key] = {d,t:Date.now()};
+        localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+      }
+
+      return d;
+    }catch{
+      return null;
+    }
+  }
+
+  function link(a){
+    if(a.mal_id) return `anime.html?malid=${a.mal_id}`;
+    if(a.anilist_id) return `anime.html?anilisid=${a.anilist_id}`;
+    return "#";
+  }
+
+  function card(api,raw,blur=false){
+    if(!api) return "";
+
+    const title = api.title.english || api.title.romaji;
+    const img = api.coverImage?.large || FALLBACK;
+    const rating = api.averageScore ? (api.averageScore/10).toFixed(1) : "N/A";
+    const year = api.startDate?.year || "—";
+
+    return `
+    <a href="${blur?'library.html':link(raw)}" class="card block relative rounded-xl overflow-hidden">
+      <img src="${img}" onerror="this.src='${FALLBACK}'"
+        class="w-full h-72 object-cover ${blur?'blur-sm brightness-50':''}">
+      ${blur?'<div class="absolute inset-0 flex items-center justify-center font-bold">VIEW ALL →</div>':''}
+      <div class="p-3">
+        <h3 class="text-sm line-clamp-2">${title}</h3>
+        <p class="text-xs text-gray-400">
+          ${year} | ${raw.count}/${api.episodes||'?'} eps | ⭐ ${rating}
+        </p>
+      </div>
+    </a>`;
+  }
+
+  // Fetch all (parallel)
+  const apiData = await Promise.all(animeList.map(fetchAni));
+
+  const merged = animeList.map((a,i)=>({raw:a,api:apiData[i]})).filter(x=>x.api);
+
+  // NEW
+  const newList = [...merged]
+    .sort((a,b)=>b.raw.latestDate - a.raw.latestDate)
+    .slice(0,10);
+
+  newGrid.innerHTML = newList.map(x=>card(x.api,x.raw)).join("");
+
+  // POPULAR
+  const pop = [...merged]
+    .sort((a,b)=>b.api.popularity - a.api.popularity)
+    .slice(0,10);
+
+  popGrid.innerHTML = pop.map(x=>card(x.api,x.raw)).join("");
+
+  // LIBRARY
+  const lib = [...merged]
+    .sort((a,b)=>b.api.startDate.year - a.api.startDate.year)
+    .slice(0,10);
+
+  libGrid.innerHTML = lib.map((x,i)=>
+    i===9 ? card(x.api,x.raw,true) : card(x.api,x.raw)
+  ).join("");
+
+});
+</script>
+
+</body>
+</html>
