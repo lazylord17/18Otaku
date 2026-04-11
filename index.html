@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const JSON_URL = "https://raw.githubusercontent.com/18otaku/streamtape-json/main/ha.json";
   const API = "https://graphql.anilist.co";
 
-  const CACHE_KEY = "anime_cache_v3";
+  const CACHE_KEY = "anime_cache_v4";
   const CACHE_TIME = 86400000;
 
   const FALLBACK = "https://via.placeholder.com/300x450?text=No+Image";
@@ -60,22 +60,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   const popGrid = document.getElementById("popular-grid");
   const libGrid = document.getElementById("library-grid");
 
-  /* ================= SAFE HEADER ================= */
+  /* ================= HEADER SAFE ================= */
   try {
-    const headerEl = document.getElementById("header");
+    const el = document.getElementById("header");
     const h = await fetch("header.html").then(r => r.text());
-    if(headerEl) headerEl.innerHTML = h;
-  } catch (e) {
-    console.log("Header load failed");
-  }
+    if (el) el.innerHTML = h;
+  } catch {}
 
   /* ================= SAFE FETCH ================= */
   async function safeFetch(url, options){
-    try{
+    try {
       const r = await fetch(url, options);
-      if(!r.ok) return null;
+      if (!r.ok) return null;
       return await r.json();
-    }catch{
+    } catch {
       return null;
     }
   }
@@ -86,7 +84,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let queue = [];
 
     const next = () => {
-      if(active >= n || queue.length === 0) return;
+      if (active >= n || queue.length === 0) return;
 
       active++;
       const {fn, resolve} = queue.shift();
@@ -111,18 +109,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   /* ================= LOAD JSON ================= */
   const json = await safeFetch(JSON_URL);
 
-  if(!json?.files){
+  if (!json?.files) {
     newGrid.innerHTML = "<p>Failed to load data</p>";
     return;
   }
 
   const map = {};
 
-  json.files.forEach(f=>{
+  json.files.forEach(f => {
     const key = f.mal_id || f.anilist_id;
-    if(!key) return;
+    if (!key) return;
 
-    if(!map[key]) map[key] = {...f, count:1};
+    if (!map[key]) map[key] = { ...f, count: 1 };
     else map[key].count++;
   });
 
@@ -130,9 +128,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   /* ================= CACHE ================= */
   let cache = {};
-  try{
+  try {
     cache = JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
-  }catch{}
+  } catch {}
 
   function saveCache(){
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
@@ -143,7 +141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const key = a.mal_id || a.anilist_id;
 
-    if(cache[key] && Date.now() - cache[key].t < CACHE_TIME){
+    if (cache[key] && Date.now() - cache[key].t < CACHE_TIME) {
       return cache[key].d;
     }
 
@@ -153,16 +151,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const vars = a.mal_id ? {idMal:+a.mal_id} : {id:+a.anilist_id};
 
-    const res = await safeFetch(API,{
-      method:"POST",
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({query,variables:vars})
+    const res = await safeFetch(API, {
+      method: "POST",
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query, variables: vars})
     });
 
     const d = res?.data?.Media || null;
 
-    if(d){
-      cache[key] = {d,t:Date.now()};
+    if (d) {
+      cache[key] = {d, t: Date.now()};
       saveCache();
     }
 
@@ -170,20 +168,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function link(a){
-    if(a.mal_id) return `anime.html?malid=${a.mal_id}`;
-    if(a.anilist_id) return `anime.html?anilisid=${a.anilist_id}`;
+    if (a.mal_id) return `anime.html?malid=${a.mal_id}`;
+    if (a.anilist_id) return `anime.html?anilisid=${a.anilist_id}`;
     return "#";
   }
 
-  function card(api, raw, blur=false){
-
-    if(!api){
-      return `
-      <div class="card rounded-xl overflow-hidden opacity-40">
-        <img src="${FALLBACK}" class="w-full h-72 object-cover">
-        <div class="p-3 text-xs">No data</div>
-      </div>`;
-    }
+  /* ================= NORMAL CARD ================= */
+  function card(api, raw){
 
     const title = api.title?.english || api.title?.romaji || "Unknown";
     const img = api.coverImage?.large || FALLBACK;
@@ -191,11 +182,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const year = api.startDate?.year || "—";
 
     return `
-    <a href="${blur ? 'library.html' : link(raw)}"
+    <a href="${link(raw)}"
        class="card block rounded-xl overflow-hidden">
 
       <img src="${img}" onerror="this.src='${FALLBACK}'"
-        class="w-full h-72 object-cover ${blur?'blur-sm brightness-50':''}">
+        class="w-full h-72 object-cover">
 
       <div class="p-3">
         <h3 class="text-sm">${title}</h3>
@@ -206,30 +197,50 @@ document.addEventListener("DOMContentLoaded", async () => {
     </a>`;
   }
 
-  /* ================= SAFE LOOP (NO CRASH) ================= */
+  /* ================= VIEW ALL CARD ================= */
+  function viewAllCard(){
+    return `
+    <a href="library.html"
+       class="card block relative rounded-xl overflow-hidden group">
+
+      <img src="${FALLBACK}"
+        class="w-full h-72 object-cover brightness-50">
+
+      <div class="absolute inset-0 flex items-center justify-center font-bold text-lg bg-black/40 group-hover:bg-black/60 transition">
+        VIEW ALL →
+      </div>
+
+    </a>`;
+  }
+
+  /* ================= SAFE LOOP ================= */
   const apiData = [];
 
-  for(let i=0;i<list.length;i++){
+  for (let i = 0; i < list.length; i++) {
     const d = await run(() => fetchAni(list[i]));
     apiData.push(d);
 
-    if(i % 20 === 0) render();
+    if (i % 20 === 0) render();
+  }
+
+  function buildGrid(items, withViewAll=false){
+
+    const cards = items.slice(0, 9).map(x => card(x.api, x.raw));
+
+    if (withViewAll) cards.push(viewAllCard());
+
+    return cards.join("");
   }
 
   function render(){
 
-    const merged = list.map((a,i)=>({raw:a,api:apiData[i]}))
-      .filter(x=>x.api);
+    const merged = list
+      .map((a,i)=>({raw:a, api:apiData[i]}))
+      .filter(x => x.api);
 
-    const newList = merged.slice(0,10);
-    const pop = merged.slice(0,10);
-    const lib = merged.slice(0,10);
-
-    newGrid.innerHTML = newList.map(x=>card(x.api,x.raw)).join("");
-    popGrid.innerHTML = pop.map(x=>card(x.api,x.raw)).join("");
-    libGrid.innerHTML = lib.map((x,i)=>
-      i===9 ? card(x.api,x.raw,true) : card(x.api,x.raw)
-    ).join("");
+    newGrid.innerHTML = buildGrid(merged, false);
+    popGrid.innerHTML = buildGrid(merged, false);
+    libGrid.innerHTML = buildGrid(merged, true); // 🔥 ONLY HERE VIEW ALL
   }
 
   render();
